@@ -13,7 +13,10 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from .bitemporal import BitemporalCorruption
-from .models import Unit, UnitVersion
+from .models import NormRelation, Unit, UnitVersion
+
+# Quan hệ auto-safe (không chi phối hiệu lforce): repeals/replaces/amends KHÔNG ở đây.
+AUTO_SAFE_TYPES = {"cites", "guides", "hierarchy", "conflicts"}
 
 
 def _unit_id(s: Session, eid: str) -> int:
@@ -72,36 +75,39 @@ def apply_amendment(
         if exists:
             return
 
-    open_rows = list(
+    # bản current-belief phủ effective_date (mở hoặc đóng) — SELECT FOR UPDATE (chaos C2)
+    covering = list(
         s.scalars(
             sa.select(UnitVersion).where(
                 UnitVersion.unit_id == uid,
                 UnitVersion.lang == lang,
                 UnitVersion.tx_to.is_(None),
-                UnitVersion.valid_to.is_(None),
-            ).with_for_update()  # serialize per-unit (chaos C2)
+                UnitVersion.valid_from <= effective_date,
+                sa.or_(UnitVersion.valid_to.is_(None), effective_date < UnitVersion.valid_to),
+            ).with_for_update()
         )
     )
+    if len(covering) > 1:
+        raise BitemporalCorruption(f"{eid}@{effective_date}: {len(covering)} bản phủ")
 
-    # same-date fold
-    for v in open_rows:
-        if v.valid_from == effective_date:
+    if covering:
+        v = covering[0]
+        if v.valid_from == effective_date:  # same-date fold
             if order_key >= v.order_key:
                 v.text, v.status, v.order_key = new_text, status, order_key
                 v.source_relation_id = source_relation_id
                 v.applies_from, v.transitional = applies_from, transitional
             s.flush()
             return
-
-    # đóng bản phủ trước effective_date
-    for v in open_rows:
-        if v.valid_from < effective_date:
-            v.valid_to = effective_date
-    s.flush()  # commit việc đóng trước khi chèn (tránh EXCLUDE tự-đụng trong 1 flush)
+        new_to = v.valid_to            # ★ interval-split: tail mở hoặc giữa chuỗi
+        v.valid_to = effective_date
+        s.flush()                      # đóng trước, tránh EXCLUDE tự-đụng trong 1 flush
+    else:
+        new_to = None
 
     s.add(
         UnitVersion(
-            unit_id=uid, lang=lang, valid_from=effective_date, valid_to=None,
+            unit_id=uid, lang=lang, valid_from=effective_date, valid_to=new_to,
             applies_from=applies_from, text=new_text, status=status,
             transitional=transitional, source_relation_id=source_relation_id,
             order_key=order_key,
@@ -113,3 +119,45 @@ def apply_amendment(
 def repeal(s: Session, eid: str, effective_date: dt.date, **kw) -> None:
     kw.setdefault("status", "het_hieu_luc")
     apply_amendment(s, eid, None, effective_date, **kw)
+
+
+# ── Materialize gate (W1 C1 / principle #8): W2 KHÔNG tin W1 vô điều kiện ─────────
+class NotApproved(Exception):
+    """Quan hệ chưa đủ điều kiện materialize (chưa duyệt / confidence thấp)."""
+
+
+def _eid(s: Session, unit_id: int) -> str:
+    return s.scalar(sa.select(Unit.eid).where(Unit.id == unit_id))
+
+
+def materialize(s: Session, rel: NormRelation, *, theta: float = 0.9) -> bool:
+    """Áp một norm_relation vào kho bitemporal — CHỈ khi qua cổng.
+
+    Cổng (C1): materialize khi `review_status='approved'`, HOẶC confidence≥θ cho
+    loại AUTO-SAFE. repeals/replaces/amends **KHÔNG BAO GIỜ auto** (phải approved).
+    Trả True nếu đã materialize, False nếu bị chặn (chờ duyệt).
+    """
+    approved = rel.review_status == "approved"
+    auto_ok = rel.relation_type in AUTO_SAFE_TYPES and (rel.confidence or 0.0) >= theta
+    if not (approved or auto_ok):
+        return False  # chặn — chờ hàng đợi duyệt (không corrupt kho)
+
+    if rel.relation_type in {"repeals", "replaces"}:
+        _materialize_repeal(s, rel)
+        return True
+    # amends cần TEXT mới (W1 resolve từ văn bản sửa đổi) — ngoài phạm vi slice-3.
+    # cites/guides/hierarchy/conflicts: quan hệ đồ thị, không chạm unit_version.
+    return True
+
+
+def _materialize_repeal(s: Session, rel: NormRelation) -> None:
+    eff = rel.effective_date
+    if eff is None:
+        raise BitemporalCorruption(f"relation {rel.id}: repeals thiếu effective_date")
+    if rel.dst_unit_id is not None:
+        repeal(s, _eid(s, rel.dst_unit_id), eff, source_relation_id=f"rel:{rel.id}")
+    else:
+        # ★ G3-fix: repeal CẢ VĂN BẢN → tombstone mọi unit của dst_doc
+        eids = s.scalars(sa.select(Unit.eid).where(Unit.document_id == rel.dst_doc_id)).all()
+        for e in eids:
+            repeal(s, e, eff, source_relation_id=f"rel:{rel.id}:{e}")

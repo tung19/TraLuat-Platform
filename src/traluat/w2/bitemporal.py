@@ -173,8 +173,9 @@ def apply_amendment(
     - Idempotent theo source_relation_id (replay không nhân đôi) — chaos C1.
     - Same-date: fold theo order_key (không tạo [d, d) zero-width) — G4-fix.
     - Fail-loud nếu tạo valid-time chồng nhau — chaos C2.
-    NOTE slice-1: sửa đổi lệch-thứ-tự lọt GIỮA một khoảng đã đóng sẽ raise
-    (cần interval-split ở slice-2 Postgres). Fail-loud, không corrupt im lặng.
+    ★ slice-3: INTERVAL-SPLIT — xử cả sửa-đổi-lệch-thứ-tự lọt GIỮA một khoảng đã
+    đóng. Tìm bản phủ effective_date (mở hoặc đóng), cắt tại đó: bản cũ valid_to=eff,
+    bản mới [eff, old_to). Khoảng sau (nếu có) giữ nguyên.
     """
     now = now or _utcnow()
 
@@ -187,28 +188,31 @@ def apply_amendment(
     ):
         return versions
 
-    open_rows = [
+    current = [
         v for v in versions
-        if v.unit_eid == target_eid and v.lang == lang and v.tx_to is None and v.valid_to is None
+        if v.unit_eid == target_eid and v.lang == lang and v.tx_to is None
     ]
+    covering = [v for v in current if _covers_valid(v, effective_date)]
+    if len(covering) > 1:
+        raise BitemporalCorruption(f"{target_eid}@{effective_date}: {len(covering)} bản phủ")
 
-    # same-date fold: bản mở bắt đầu đúng effective_date → gộp theo order_key
-    for v in open_rows:
-        if v.valid_from == effective_date:
+    if covering:
+        v = covering[0]
+        if v.valid_from == effective_date:  # same-date fold theo order_key
             if order_key >= v.order_key:
                 v.text, v.status, v.order_key = new_text, status, order_key
                 v.source_relation_id = source_relation_id
                 v.applies_from, v.transitional = applies_from, transitional
             return versions
-
-    # đóng bản mở phủ trước effective_date
-    for v in open_rows:
-        if v.valid_from < effective_date:
-            v.valid_to = effective_date
+        old_to = v.valid_to          # có thể None (tail mở) hoặc date (giữa chuỗi)
+        v.valid_to = effective_date  # cắt
+        new_to = old_to
+    else:
+        new_to = None                # không bản nào phủ: segment mới mở
 
     versions.append(
         UnitVersion(
-            unit_eid=target_eid, lang=lang, valid_from=effective_date, valid_to=None,
+            unit_eid=target_eid, lang=lang, valid_from=effective_date, valid_to=new_to,
             text=new_text, tx_from=now, tx_to=None, applies_from=applies_from,
             status=status, transitional=transitional,
             source_relation_id=source_relation_id, order_key=order_key,

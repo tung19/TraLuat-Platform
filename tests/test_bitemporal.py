@@ -82,6 +82,20 @@ def test_same_date_order_key():
     assert len(open_at) == 1
 
 
+# ── out-of-order / interval-split (slice-3): sửa đổi lọt GIỮA khoảng đã đóng ──────
+def test_out_of_order_split():
+    vs = _seed()                                   # [2021, ∞) = "A"
+    apply_amendment(vs, EID, "C", D(2025, 1, 1), source_relation_id="r2025")  # → [2021,2025)A + [2025,∞)C
+    # sửa đổi ĐẾN SAU nhưng hiệu lực 2023 (lệch thứ tự) → cắt khoảng [2021,2025)
+    apply_amendment(vs, EID, "B", D(2023, 1, 1), source_relation_id="r2023")
+    assert reconstruct_as_of(vs, EID, D(2022, 1, 1)) == "Mức vốn 20 tỷ."   # [2021,2023) giữ A
+    assert reconstruct_as_of(vs, EID, D(2024, 1, 1)) == "B"                 # [2023,2025) mới
+    assert reconstruct_as_of(vs, EID, D(2026, 1, 1)) == "C"                 # [2025,∞) giữ C
+    # không chồng nhau (nếu chồng _assert_no_overlap đã raise)
+    open_or_closed = [v for v in vs if v.tx_to is None]
+    assert len(open_or_closed) == 3
+
+
 # ── idempotent (chaos C1): replay cùng relation không nhân đôi ───────────────────
 def test_idempotent_apply():
     vs = _seed()

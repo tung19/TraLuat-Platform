@@ -88,6 +88,32 @@ class UnitVersion(Base):
     )
 
 
+class NormRelation(Base):
+    """Quan hệ quy phạm (amends/repeals/…) — G3-fix: endpoint cấp DOCUMENT hoặc UNIT."""
+
+    __tablename__ = "norm_relation"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    relation_type: Mapped[str]  # cites|amends|repeals|replaces|guides|conflicts|hierarchy
+    effective_date: Mapped[dt.date | None]
+    src_doc_id: Mapped[int] = mapped_column(sa.ForeignKey("document.id"))
+    src_unit_id: Mapped[int | None] = mapped_column(sa.ForeignKey("unit.id"))
+    dst_doc_id: Mapped[int] = mapped_column(sa.ForeignKey("document.id"))
+    dst_unit_id: Mapped[int | None] = mapped_column(sa.ForeignKey("unit.id"))
+    order_key: Mapped[int] = mapped_column(default=0)           # ★ G4
+    confidence: Mapped[float | None]
+    confidence_basis: Mapped[str | None]                        # ★ C2: không bịa confidence
+    review_status: Mapped[str] = mapped_column(default="needs_review")  # ★ C1 gate
+    evidence_span: Mapped[str | None]
+
+    __table_args__ = (
+        # ★ C3-fix: dedupe — replay/CDC không nhân đôi edge
+        sa.UniqueConstraint(
+            "src_doc_id", "src_unit_id", "dst_doc_id", "dst_unit_id",
+            "relation_type", "effective_date", name="nr_dedupe",
+        ),
+    )
+
+
 # DDL phụ thuộc: btree_gist phải có TRƯỚC khi tạo uv_no_overlap.
 BTREE_GIST = sa.DDL("CREATE EXTENSION IF NOT EXISTS btree_gist")
 sa.event.listen(Base.metadata, "before_create", BTREE_GIST.execute_if(dialect="postgresql"))
