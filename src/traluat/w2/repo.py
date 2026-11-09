@@ -12,7 +12,7 @@ import datetime as dt
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from .bitemporal import BitemporalCorruption
+from .bitemporal import BitemporalCorruption, EffectStatus
 from .models import NormRelation, Unit, UnitVersion
 
 # Quan hệ auto-safe (không chi phối hiệu lforce): repeals/replaces/amends KHÔNG ở đây.
@@ -161,3 +161,98 @@ def _materialize_repeal(s: Session, rel: NormRelation) -> None:
         eids = s.scalars(sa.select(Unit.eid).where(Unit.document_id == rel.dst_doc_id)).all()
         for e in eids:
             repeal(s, e, eff, source_relation_id=f"rel:{rel.id}:{e}")
+
+
+# ── effect_status qua DB (B3-fix: enum, không bool) ─────────────────────────────
+def effect_status(
+    s: Session, eid: str, as_of: dt.date, lang: str = "vi",
+    known_as_of: dt.datetime | None = None,
+) -> EffectStatus:
+    known = known_as_of or dt.datetime.now(dt.timezone.utc)
+    rows = list(
+        s.execute(
+            sa.select(UnitVersion.valid_from, UnitVersion.valid_to,
+                      UnitVersion.text, UnitVersion.transitional)
+            .join(Unit, Unit.id == UnitVersion.unit_id)
+            .where(
+                Unit.eid == eid, UnitVersion.lang == lang,
+                UnitVersion.tx_from <= known,
+                sa.or_(UnitVersion.tx_to.is_(None), known < UnitVersion.tx_to),
+            )
+        )
+    )
+    if not rows:
+        return EffectStatus.ABSENT
+    covering = [r for r in rows if r.valid_from <= as_of and (r.valid_to is None or as_of < r.valid_to)]
+    if len(covering) > 1:
+        raise BitemporalCorruption(f"{eid}@{as_of}: {len(covering)} dòng in-force")
+    if covering:
+        return EffectStatus.EXPIRED_CITABLE if covering[0].text is None else EffectStatus.IN_FORCE
+    if as_of < min(r.valid_from for r in rows):
+        return EffectStatus.NOT_YET
+    if any(r.transitional for r in rows):
+        return EffectStatus.TRANSITIONAL_APPLIES
+    return EffectStatus.EXPIRED_CITABLE
+
+
+# ── R5: correct_valid_from (tx-time — giữ 'điều hệ thống từng tin') ───────────────
+def correct_valid_from(
+    s: Session, version_id: int, correct_valid_from: dt.date,
+    now: dt.datetime | None = None,
+) -> None:
+    """Sửa ngày hiệu lực bị NHẬP SAI — KHÔNG ghi đè (chaos: in-place UPDATE phá tx-time).
+
+    Đóng bản sai ở trục transaction-time (tx_to=now, giữ để audit) + chèn bản ĐÚNG
+    (tx_from=now). → truy vấn với known_as_of trong quá khứ vẫn trả điều hệ-thống-từng-tin.
+    """
+    now = now or dt.datetime.now(dt.timezone.utc)
+    v = s.get(UnitVersion, version_id)
+    if v is None or v.tx_to is not None:
+        raise BitemporalCorruption(f"version {version_id} không tồn tại / không còn current")
+    v.tx_to = now  # đóng tin cũ (vẫn giữ dòng)
+    s.flush()
+    s.add(
+        UnitVersion(
+            unit_id=v.unit_id, lang=v.lang, valid_from=correct_valid_from, valid_to=v.valid_to,
+            applies_from=v.applies_from, text=v.text, tx_from=now, tx_to=None,
+            status=v.status, transitional=v.transitional,
+            source_relation_id=v.source_relation_id, order_key=v.order_key,
+        )
+    )
+    s.flush()
+
+
+# ── §5.1: multihop norm-graph (FK + recursive CTE; bounded + cycle-safe + as_of) ──
+def multihop(
+    s: Session, start_eid: str, rel_types: list[str], max_hops: int = 3,
+    as_of: dt.date | None = None,
+) -> list[str]:
+    """Các đơn vị tới được từ start_eid qua rel_types (dẫn chiếu/hướng dẫn…).
+
+    Bounded-hop (performance §4 guard) + chống chu trình (path array) + lọc hiệu lực
+    quan hệ theo as_of. AGE để sau — FK+CTE trước (stack-db: hoãn AGE).
+    """
+    start_id = _unit_id(s, start_eid)
+    as_of = as_of or dt.date.max
+    sql = sa.text("""
+        WITH RECURSIVE reach(unit_id, depth, path) AS (
+            SELECT CAST(:start_id AS integer), 0, ARRAY[CAST(:start_id AS integer)]
+          UNION ALL
+            SELECT nr.dst_unit_id, r.depth + 1, r.path || nr.dst_unit_id
+            FROM reach r
+            JOIN norm_relation nr ON nr.src_unit_id = r.unit_id
+            WHERE nr.relation_type = ANY(CAST(:types AS text[]))
+              AND nr.dst_unit_id IS NOT NULL
+              AND (nr.effective_date IS NULL OR nr.effective_date <= :as_of)
+              AND r.depth < :max_hops
+              AND NOT (nr.dst_unit_id = ANY(r.path))   -- cycle guard
+        )
+        SELECT DISTINCT u.eid
+        FROM reach JOIN unit u ON u.id = reach.unit_id
+        WHERE reach.depth > 0
+    """)
+    rows = s.execute(
+        sql, {"start_id": start_id, "types": list(rel_types),
+              "as_of": as_of, "max_hops": max_hops}
+    ).scalars().all()
+    return sorted(rows)
