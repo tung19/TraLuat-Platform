@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://traluat/schemas/meta.schema.json",
+  "title": "TraLuat meta.json — hợp đồng output của đội data cho W1",
+  "description": "Khớp docs/data-cleaning-handoff.md + docs/specs/meta-json-assumed-schema.md. GIẢ ĐỊNH tới khi chốt trên mẫu thật. W1 validate mọi file bằng schema này.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["doc_type", "title_vi", "date_issued", "language", "jurisdiction"],
+  "properties": {
+    "doc_number": { "type": ["string", "null"], "description": "vd 99/2020/NĐ-CP" },
+    "doc_type": {
+      "type": "string",
+      "enum": ["luat", "bo_luat", "nghi_dinh", "thong_tu", "thong_tu_lien_tich",
+               "quyet_dinh", "nghi_quyet", "phap_lenh", "cong_van",
+               "an_le", "ban_an", "van_ban_hop_nhat"]
+    },
+    "title_vi": { "type": "string", "minLength": 1 },
+    "title_en": { "type": ["string", "null"] },
+    "issuing_authority": { "type": ["string", "null"] },
+    "jurisdiction": { "type": "string", "default": "VN" },
+    "scope": { "type": "string", "enum": ["quoc_gia", "tinh", "nganh"], "default": "quoc_gia" },
+    "date_issued": { "$ref": "#/$defs/dateOrNull" },
+    "date_effective": { "$ref": "#/$defs/dateOrNull", "description": "NGÀY HIỆU LỰC (moat #1). null => phải needs_review=true" },
+    "date_effective_source": { "type": ["string", "null"], "description": "★ câu nguồn + vị trí lấy ngày hiệu lực (để verify)" },
+    "date_applicable": { "$ref": "#/$defs/dateOrNull", "description": "ngày áp dụng, nếu khác hiệu lực" },
+    "date_expired": { "$ref": "#/$defs/dateOrNull" },
+    "status": { "type": ["string", "null"], "enum": ["con_hieu_luc", "het_hieu_luc", "het_mot_phan", "chua_hieu_luc", null] },
+    "needs_review": { "type": "boolean", "default": false },
+    "source_uri": { "type": ["string", "null"] },
+    "source_hash": { "type": ["string", "null"] },
+    "language": { "type": "string", "default": "vi" },
+    "is_scanned": { "type": "boolean", "default": false },
+    "ocr_conf": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "is_consolidated": { "type": "boolean", "default": false },
+    "units": { "type": "array", "items": { "$ref": "#/$defs/unit" } },
+    "relations": { "type": "array", "items": { "$ref": "#/$defs/relation" } },
+
+    "number": { "type": ["string", "null"], "description": "án lệ: vd 90/2026/AL" },
+    "name": { "type": ["string", "null"] },
+    "situation": { "type": ["string", "null"], "description": "án lệ: tình huống án lệ" },
+    "solution": { "type": ["string", "null"], "description": "án lệ: giải pháp pháp lý" },
+    "interpreted_units": { "type": "array", "items": { "type": "string" } },
+    "date_adopted": { "$ref": "#/$defs/dateOrNull" },
+    "date_annulled": { "$ref": "#/$defs/dateOrNull" },
+
+    "case_no": { "type": ["string", "null"] },
+    "court": { "type": ["string", "null"] },
+    "date": { "$ref": "#/$defs/dateOrNull" },
+    "matter_type": { "type": ["string", "null"] },
+    "anonymization_source": { "type": ["string", "null"], "description": "vd congbobanan.toaan.gov.vn" },
+    "anonymization_status": { "type": "string", "enum": ["source_anonymized", "verified", "unverified"], "description": "★ KHÔNG cho null (chaos S1: null từng PASS → bản án chưa ẩn danh lọt). unverified = quarantine, KHÔNG ingest." },
+    "facts": { "type": ["string", "null"] },
+    "holdings": { "type": ["string", "null"] },
+    "cited_units": { "type": "array", "items": { "type": "string" } },
+    "cited_precedents": { "type": "array", "items": { "type": "string" } },
+    "outcome_label": { "type": ["string", "null"], "enum": ["A_WIN", "PARTIAL_A_WIN", "PARTIAL_B_WIN", "B_WIN", null] }
+  },
+
+  "allOf": [
+    {
+      "description": "Có ít nhất một nguồn truy vết (uri hoặc hash).",
+      "anyOf": [
+        { "required": ["source_uri"], "properties": { "source_uri": { "type": "string", "minLength": 1 } } },
+        { "required": ["source_hash"], "properties": { "source_hash": { "type": "string", "minLength": 1 } } }
+      ]
+    },
+    {
+      "description": "VBQPPL: date_effective phải có; nếu null thì bắt buộc needs_review=true (B/A).",
+      "if": { "properties": { "doc_type": { "enum": ["luat", "bo_luat", "nghi_dinh", "thong_tu", "thong_tu_lien_tich", "quyet_dinh", "nghi_quyet", "phap_lenh"] } } },
+      "then": {
+        "anyOf": [
+          { "properties": { "date_effective": { "type": "string" } }, "required": ["date_effective"] },
+          { "properties": { "needs_review": { "const": true } }, "required": ["needs_review"] }
+        ]
+      }
+    },
+    {
+      "description": "Bản án: bắt buộc anonymization_source + anonymization_status ∈ {source_anonymized, verified} để INGEST-READY. unverified → quarantine (fail gate, không nạp). (D + chaos S1)",
+      "if": { "properties": { "doc_type": { "const": "ban_an" } } },
+      "then": {
+        "required": ["anonymization_status", "anonymization_source"],
+        "properties": {
+          "anonymization_status": { "enum": ["source_anonymized", "verified"] },
+          "anonymization_source": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "description": "Án lệ: bắt buộc number + situation + solution.",
+      "if": { "properties": { "doc_type": { "const": "an_le" } } },
+      "then": { "required": ["number", "situation", "solution"] }
+    }
+  ],
+
+  "$defs": {
+    "dateOrNull": {
+      "type": ["string", "null"],
+      "anyOf": [ { "type": "null" }, { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" } ]
+    },
+    "unit": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["unit_type", "ordinal", "label"],
+      "properties": {
+        "unit_type": { "type": "string", "enum": ["phan", "chuong", "muc", "tieu_muc", "dieu", "khoan", "diem"] },
+        "ordinal": { "type": "integer" },
+        "label": { "type": "string" },
+        "eid": { "type": ["string", "null"] },
+        "text": { "type": ["string", "null"] },
+        "effective_date": { "$ref": "#/$defs/dateOrNull", "description": "★ hiệu lực theo TỪNG ĐIỀU (phased commencement) — A" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/unit" } }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "target_doc"],
+      "properties": {
+        "type": { "type": "string", "enum": ["cites", "amends", "repeals", "replaces", "guides", "conflicts", "hierarchy"] },
+        "target_doc": { "type": "string" },
+        "target_unit": { "type": ["string", "null"] },
+        "effective_date": { "$ref": "#/$defs/dateOrNull", "description": "★ lấy từ văn bản SỬA ĐỔI; không biết thì để trống (E)" },
+        "evidence": { "type": ["string", "null"], "description": "câu gốc nêu quan hệ" }
+      }
+    }
+  }
+}

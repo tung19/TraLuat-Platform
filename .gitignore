@@ -1,0 +1,16 @@
+# Dependencies / envs
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# External study repos (cloned, có .git riêng — re-clone qua steal-list khi cần)
+refs/
+
+# Local / generated
+.claude/settings.local.json
+.DS_Store
+TraLuat-data-handoff.zip
+/private/
+scratchpad/

@@ -1,0 +1,2 @@
+# Phụ thuộc cho đội data để tự validate meta.json (python scripts/validate_meta.py)
+jsonschema>=4.0

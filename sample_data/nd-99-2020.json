@@ -1,0 +1,45 @@
+{
+  "doc_number": "99/2020/NĐ-CP",
+  "doc_type": "nghi_dinh",
+  "title_vi": "Nghị định 99/2020/NĐ-CP (mẫu minh hoạ)",
+  "title_en": null,
+  "issuing_authority": "Chính phủ",
+  "jurisdiction": "VN",
+  "scope": "quoc_gia",
+  "date_issued": "2020-08-20",
+  "date_effective": "2021-01-01",
+  "date_effective_source": "Điều 10: \"Nghị định này có hiệu lực thi hành từ ngày 01 tháng 01 năm 2021.\"",
+  "status": "con_hieu_luc",
+  "needs_review": false,
+  "source_uri": "https://vbpl.vn/...",
+  "source_hash": "sha256:PLACEHOLDER",
+  "language": "vi",
+  "is_scanned": false,
+  "is_consolidated": false,
+  "relations": [
+    {
+      "type": "amends",
+      "target_doc": "80/2015/NĐ-CP",
+      "target_unit": "dieu-5",
+      "effective_date": "2021-01-01",
+      "evidence": "Sửa đổi, bổ sung Điều 5 của Nghị định số 80/2015/NĐ-CP."
+    }
+  ],
+  "units": [
+    {
+      "unit_type": "dieu", "ordinal": 3, "label": "Điều 3", "eid": "nd99__dieu_3",
+      "effective_date": "2021-01-01",
+      "children": [
+        { "unit_type": "khoan", "ordinal": 1, "label": "1", "eid": "nd99__dieu_3__khoan_1",
+          "text": "Doanh nghiệp phải nộp hồ sơ trong thời hạn 15 ngày làm việc." },
+        { "unit_type": "khoan", "ordinal": 2, "label": "2", "eid": "nd99__dieu_3__khoan_2",
+          "text": "Mức vốn pháp định tối thiểu là 20 tỷ đồng." }
+      ]
+    },
+    {
+      "unit_type": "dieu", "ordinal": 7, "label": "Điều 7", "eid": "nd99__dieu_7",
+      "effective_date": "2022-01-01",
+      "text": "Điều này có hiệu lực theo lộ trình riêng (minh hoạ phased commencement)."
+    }
+  ]
+}

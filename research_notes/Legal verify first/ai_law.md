@@ -1,0 +1,108 @@
+# Vietnam AI-Related Legislation for a Legal-AI Product — Fact-Check
+
+> Scope: Verify two claimed laws and their obligations relevant to a legal-AI SaaS. Current as of 2026-11-05. All findings are from secondary law-firm/news sources; the enacted primary Vietnamese texts were not directly read in this pass, so clause-level wording is flagged where it matters. VERIFIED vs UNVERIFIED/CONFLICTING separated throughout.
+
+## Q1. Law on Artificial Intelligence No. 134/2025/QH15 — existence, dates, role-based structure
+
+### Takeaway
+VERIFIED that Vietnam passed a standalone Law on Artificial Intelligence on 10 December 2025, effective 1 March 2026, and that it is widely cited as No. 134/2025/QH15. VERIFIED that it allocates obligations by ROLE (developer / supplier(provider) / deploying party / user) combined with a three-tier risk classification — so "by role, not by industry" is broadly correct but incomplete: it is role-based AND risk-based, with sectors used mainly to identify high-risk systems.
+
+### Cited Findings
+- Vietnam's National Assembly (15th, 10th session) passed the first Law on Artificial Intelligence on 10 December 2025; vote 429/434 deputies (90.7%); it takes effect 1 March 2026; 8 chapters, 35 articles. — [Government portal, baochinhphu.vn](https://en.baochinhphu.vn/first-ever-law-on-artificial-intelligence-approved-111251211093619398.htm); passage date/structure also in [VietnamNews](https://vietnamnews.vn/politics-laws/1730125/national-assembly-sets-legal-framework-to-guide-responsible-ai-growth.html)
+- The law number **134/2025/QH15** appears in multiple secondary sources (law-firm/compliance). The official Government article confirms the law, date, and effect but does NOT print the number; the VietnamNews and Duane Morris pieces also do not print the number. — number per [B&Company](https://b-company.jp/?p=25713), [Apolat Legal](https://apolatlegal.com/laws/law-on-artificial-intelligence-2025-no-134-2025-qh15/), [Allen & Gledhill](https://www.allenandgledhill.com/vn/publication/articles/32667/s-new-law-on-artificial-intelligence-risk-based-regulatory-framework-in-force-1-march-2026); effect date per [baochinhphu.vn](https://en.baochinhphu.vn/first-ever-law-on-artificial-intelligence-approved-111251211093619398.htm)
+- Scope: applies to Vietnamese and foreign entities in research, development, provision, deployment and use of AI systems in Vietnam; excludes AI used solely for defence, security, or cipher/cryptographic purposes. — [baochinhphu.vn](https://en.baochinhphu.vn/first-ever-law-on-artificial-intelligence-approved-111251211093619398.htm); [regulations.ai summary](https://regulations.ai/regulations/vietnam-summary)
+- Provides unified definitions of AI, AI systems, developers, providers, deployers, users and affected persons, each with distinct rights/responsibilities. — [baochinhphu.vn](https://en.baochinhphu.vn/first-ever-law-on-artificial-intelligence-approved-111251211093619398.htm)
+- Role definitions and duties (Allen & Gledhill breakdown of enacted law):
+  - **Developers** — design/build/train/test/fine-tune systems, control technical methods/training data/parameters; after a serious malfunction must rectify, suspend or recall and notify the competent authority.
+  - **Suppliers (provider equivalent)** — bring a system to market under own name/brand; must classify systems before deployment and notify the Ministry of Science and Technology (MOST) via the national AI Portal; for high-risk: maintain risk management, technical documentation, operational logs, undergo conformity assessment; for medium-risk: explain intended use and risk controls on request (no source-code/trade-secret disclosure); foreign suppliers of high-risk systems must keep a legal point of contact in Vietnam.
+  - **Implementing parties / deploying parties (deployer equivalent) & Users** — run systems in professional/commercial contexts; for high-risk must operate/monitor within classified scope, ensure data security, prevent unauthorised interference; must report incidents via the Portal. — [Allen & Gledhill](https://www.allenandgledhill.com/vn/publication/articles/32667/s-new-law-on-artificial-intelligence-risk-based-regulatory-framework-in-force-1-march-2026)
+- Ministry of Science and Technology (MOST) is the national focal authority; provincial People's Committees handle local management. — [baochinhphu.vn](https://en.baochinhphu.vn/first-ever-law-on-artificial-intelligence-approved-111251211093619398.htm)
+- Called the first comprehensive, standalone, binding AI statute in Southeast Asia. — [baochinhphu.vn](https://en.baochinhphu.vn/first-ever-law-on-artificial-intelligence-approved-111251211093619398.htm)
+
+### Inferences
+- "Regulates by role not by industry" is directionally VERIFIED for how *obligations* attach (developer/supplier/deployer/user), but the law is better described as role-based + risk-tiered; sector/industry still matters because it feeds the high-risk list (healthcare, education, banking, transport, litigation, etc. — see Q3).
+- Because the government's own English release omits the gazette number, the "134/2025/QH15" number rests on consistent law-firm citation rather than a primary printing seen here; treat as high-confidence but formally confirm against the gazette.
+
+### Gaps
+- Primary gazette text/number not directly read (vanban.chinhphu.vn / quochoi.vn not fetched). The specific article numbers of the AI Law were not citable from the sources read (Allen & Gledhill and Duane Morris did not print AI-Law article numbers).
+
+## Q2. Law on Digital Technology Industry No. 71/2025/QH15 — labeling of AI content from 1 Jan 2026
+
+### Takeaway
+VERIFIED that Law No. 71/2025/QH15 exists, was passed 14 June 2025 and is fully effective 1 January 2026, and that it contains AI identification/labeling duties (Article 44) and role responsibilities (Article 45). The specific claim that AI-generated products must carry an identifying label "from 1 January 2026" is supported by secondary sources and matches the law's general effective date, but no primary clause stating that exact labeling start date was directly verified — flag for primary-text check.
+
+### Cited Findings
+- Law No. 71/2025/QH15 (Law on Digital Technology Industry / DTI Law) passed 14 June 2025, effective 1 January 2026; covers digital tech industry, semiconductors, AI, digital assets; some provisions took effect 1 July 2025. — [DFDL](https://www.dfdl.com/insights/legal-and-tax-updates/vietnam-landmark-law-on-digital-technology-industry-new-frameworks-for-ai-digital-assets/); partial-effect note per [Tilleke](https://www.tilleke.com/insights/vietnams-digital-tech-industry-law-building-the-future-of-ai-chips-and-digital-assets/)
+- **Article 44 (identification signs for AI systems and AI-generated products):**
+  - Clause 1 — AI systems that interact directly with humans must notify users they are interacting with an AI system (unless users are clearly already aware).
+  - Clause 2 — Products on the "List of AI-created digital technology products" must bear identification signs recognisable by users or machines.
+  - Clause 3 — The Minister of Science and Technology issues the List of AI-created digital technology products. — [Viet An Law](https://vietanlaw.com/identifying-ai-products-in-vietnam/); List/machine-readable point corroborated by [Tilleke](https://www.tilleke.com/insights/vietnams-digital-tech-industry-law-building-the-future-of-ai-chips-and-digital-assets/)
+- **Article 45** sets responsibilities for developers, providers, and deployers of AI systems (data governance, monitoring/inspection, cybersecurity/safety); the provider of an AI system is identified as responsible for complying with the identification-marking rules. — [Viet An Law](https://vietanlaw.com/identifying-ai-products-in-vietnam/)
+- Scope of labelable products "may include" AI-generated text, images, audio, video; content synthesized/edited/simulated by AI; and products integrated with AI for user interaction. — [Viet An Law](https://vietanlaw.com/identifying-ai-products-in-vietnam/)
+- DTI Law uses a three-group risk approach for AI: **high-risk, high-impact, and other (standard)**; high-risk and high-impact face stricter technical, data-governance, monitoring, and cybersecurity requirements; seven core principles apply to developers/providers/deployers (human-centered; transparency/accountability/explainability with human control; cybersecurity/safety; data protection/privacy; control over algorithms/models; lifecycle risk management; consumer-protection compliance). — [Tilleke](https://www.tilleke.com/insights/vietnams-digital-tech-industry-law-building-the-future-of-ai-chips-and-digital-assets/)
+- Labeling start "from January 1, 2026": asserted by Viet An Law in headings/summary but the page does NOT quote a specific effective-date clause for labeling; it notes MOST had not yet issued the List as of publication. — [Viet An Law](https://vietanlaw.com/identifying-ai-products-in-vietnam/)
+
+### Inferences
+- The labeling obligation is practically contingent on MOST issuing the "List of AI-created digital technology products." Until that List exists, the Clause 2 marking duty has no enumerated products to attach to, even though the law is "in effect" from 1 Jan 2026. This is material for a legal-AI SaaS planning compliance timing.
+- The DTI Law's own risk taxonomy (high-risk / high-impact / other) differs in wording from the AI Law's (high / medium / low), which is a source of the overlap confusion in Q4.
+
+### Gaps
+- Exact primary wording and effective date of the Article 44 labeling duty not confirmed from the official text; "1 January 2026" is the law's general effective date, not a separately verified labeling-specific date.
+- Whether MOST has issued the List of AI-created digital technology products (and its contents / required label format) — not confirmed; as of the Viet An Law page, not issued.
+- An official full-text PDF of 71/2025/QH15 appeared in search (qtsc.com.vn and oneasia.legal mirrors) but was not fetched/translated this pass.
+
+## Q3. Obligations relevant to a legal-AI SaaS — labeling, roles, risk tiers, transparency/oversight
+
+### Takeaway
+A legal-AI SaaS is most likely a **supplier/provider** (and often also a **deploying party**) of a system that interacts with humans and generates content. Under the AI Law it would face transparency/AI-interaction disclosure, machine-readable tagging of generated media, classification-and-notification duties, and — if its output is deemed high-risk (litigation is on the high-risk list) — conformity assessment, documentation, logging, human oversight, and registration.
+
+### Cited Findings
+- **(a) AI-generated content labeling (AI Law):** Suppliers must ensure human-interacting AI tells users they are dealing with AI (unless other law provides otherwise), and must ensure generated audio/visual/video content is tagged in a **machine-readable format as the Government prescribes**. Deploying parties must clearly notify the public where text/audio/image/video is likely to cause confusion about authenticity, and must label AI-created/edited content that simulates real people or recreates real events. Users of medium-risk systems must comply with applicable notification/labelling. — [Allen & Gledhill](https://www.allenandgledhill.com/vn/publication/articles/32667/s-new-law-on-artificial-intelligence-risk-based-regulatory-framework-in-force-1-march-2026); machine-readable label also per [Duane Morris](https://blogs.duanemorris.com/vietnam/2026/03/03/vietnam-the-first-law-on-artificial-intelligence-what-you-must-know/)
+- **(b) Obligations by role (AI Law):** see Q1 — developers vs suppliers(providers) vs implementing/deploying parties vs users, with high-risk carrying the heaviest supplier+deployer duties (both must meet strict management obligations before and throughout operation). — [Allen & Gledhill](https://www.allenandgledhill.com/vn/publication/articles/32667/s-new-law-on-artificial-intelligence-risk-based-regulatory-framework-in-force-1-march-2026)
+- **(c) Risk tiers (AI Law):** three tiers — **high-risk** (significant harm to life/health/rights or national/public interests; pre-market conformity assessment for Prime-Minister-listed systems, ongoing risk management, human oversight, registration on national AI portal), **medium-risk** (systems that could confuse/influence/manipulate users who may not realise they face AI/AI content; monitoring via reports, sample audits, transparency disclosures), **low-risk** (everything else; minimal oversight, incident monitoring, voluntary guidelines). — [Allen & Gledhill](https://www.allenandgledhill.com/vn/publication/articles/32667/s-new-law-on-artificial-intelligence-risk-based-regulatory-framework-in-force-1-march-2026); [Duane Morris](https://blogs.duanemorris.com/vietnam/2026/03/03/vietnam-the-first-law-on-artificial-intelligence-what-you-must-know/)
+- **High-risk list (Decision No. 33/2026/QD-TTg):** 46 high-risk systems across six categories — transportation (31), ethnicity/religion (7), education (3), healthcare (2), banking (2), and **litigation (1)**; effective 15 August 2026; transition until Sept 2027 for existing education/healthcare/banking systems and until 1 March 2027 for other existing high-risk systems. — [MoFo](https://www.mofo.com/artificial-intelligence/vietnam)
+- **(d) Transparency / human oversight (AI Law):** individuals have a right to explanation; high-risk systems require ongoing human monitoring by deploying parties within classified scope; obstructing required human-oversight mechanisms is prohibited regardless of risk class; bodies running high-risk systems in state management/public services must publish impact assessments covering human-oversight mechanisms. — [Allen & Gledhill](https://www.allenandgledhill.com/vn/publication/articles/32667/s-new-law-on-artificial-intelligence-risk-based-regulatory-framework-in-force-1-march-2026); right-to-explanation per web search aggregate of sources
+- **Prohibited practices (AI Law, any risk class):** misusing/hijacking AI for unlawful acts or to infringe rights; deceptive manipulation and exploiting vulnerable groups; disseminating false content seriously threatening national security/public order; unlawful data use; obstructing required human oversight; concealing/falsifying mandatory disclosures or labels. — [Allen & Gledhill](https://www.allenandgledhill.com/vn/publication/articles/32667/s-new-law-on-artificial-intelligence-risk-based-regulatory-framework-in-force-1-march-2026)
+- **Implementing instruments:** Decree No. 142/2026/ND-CP implements the AI Law, effective 1 May 2026 (applies to providers/developers/deployers/users incl. foreign entities); Decision No. 33/2026/QD-TTg lists high-risk systems, effective 15 August 2026. — [MoFo](https://www.mofo.com/artificial-intelligence/vietnam); Decree 142 effect date also per [web search aggregate](https://www.allenandgledhill.com/vn/publication/articles/32667/s-new-law-on-artificial-intelligence-risk-based-regulatory-framework-in-force-1-march-2026)
+- **Grace periods:** existing systems — 18 months for finance/healthcare/education, 12 months for other sectors. — [Duane Morris](https://blogs.duanemorris.com/vietnam/2026/03/03/vietnam-the-first-law-on-artificial-intelligence-what-you-must-know/)
+
+### Inferences
+- A legal-AI SaaS whose output assists litigation/legal decisions is at real risk of falling in the AI Law high-risk tier (litigation is explicitly one of the 46 high-risk systems in Decision 33/2026), triggering conformity assessment, documentation, logging, human oversight, portal registration, and (if foreign) a Vietnam contact point.
+- Even if not high-risk, a conversational legal-AI is likely at least medium-risk (users may not realise they are interacting with AI / may be misled), triggering AI-interaction disclosure plus transparency-on-request duties.
+- The concrete label format ("machine-readable, as Government prescribes") depends on Decree 142/2026/ND-CP and MOST guidance — the operative technical spec is in delegated legislation, not the statute.
+
+### Gaps
+- Exact content/format of the required machine-readable label is left to Government (Decree 142/2026/ND-CP) — the decree text was not read this pass.
+- Whether a text-generation legal assistant (vs audio/image/video) is caught by the "tagging" duty vs only the "disclosure" duty needs the primary text / decree.
+
+## Q4. Overlap: does the AI Law repeal/supersede the DTI Law's AI provisions?
+
+### Takeaway
+CONFLICTING sources. The most specific and reputable source read (Allen & Gledhill, VN office) says the AI Law **complements** the DTI Law and the DTI Law's AI provisions **continue to apply alongside** it, with no repeal. A separate secondary source claims the AI Law **repeals most** of the DTI Law's AI provisions. This is unresolved and requires reading the AI Law's final/transitional (repeal) clause in the primary text.
+
+### Cited Findings
+- "The AI Law complements the Law on Digital Technology Industry"; the DTI Law's AI-related provisions "continue to apply alongside the AI Law"; no repeal mentioned. — [Allen & Gledhill](https://www.allenandgledhill.com/vn/publication/articles/32667/s-new-law-on-artificial-intelligence-risk-based-regulatory-framework-in-force-1-march-2026)
+- Contradicting claim: the AI Law "repeals most AI-related provisions previously embedded in the Law on Digital Technology Industry" and streamlines Vietnam's AI regulatory architecture (note: "most," not all). — [B&Company](https://b-company.jp/?p=25713) (secondary commentary)
+- DTI Law described elsewhere as a "companion framework complementing the AI Law," still covering AI systems alongside semiconductors/digital assets. — [web search aggregate incl. DFDL/Baker McKenzie](https://www.dfdl.com/insights/legal-and-tax-updates/vietnam-landmark-law-on-digital-technology-industry-new-frameworks-for-ai-digital-assets/)
+- Both laws exempt AI used for national defence/state security/cryptographic purposes and both give MOST a coordinating role, indicating deliberate alignment rather than a clean replacement. — [regulations.ai summary](https://regulations.ai/regulations/vietnam-summary)
+- Timing: DTI Law (71/2025) effective first (1 Jan 2026); AI Law (134/2025) effective 1 March 2026. The DTI Law was the first Vietnamese law to explicitly mention AI; the AI Law is the standalone/primary AI statute. — [baochinhphu.vn](https://en.baochinhphu.vn/first-ever-law-on-artificial-intelligence-approved-111251211093619398.htm); [DFDL](https://www.dfdl.com/insights/legal-and-tax-updates/vietnam-landmark-law-on-digital-technology-industry-new-frameworks-for-ai-digital-assets/)
+
+### Inferences
+- Both laws have overlapping but differently-worded AI content (e.g. DTI Art. 44 labeling / Art. 45 role duties; three DTI tiers high-risk/high-impact/other vs AI-Law tiers high/medium/low). The practical question for compliance is whether, on the same subject (e.g. labeling), the later AI Law prevails. Under Vietnamese law-making rules, where two laws conflict the later-enacted and/or more specific law generally governs — which would favour the AI Law for AI-specific obligations — but this is a general principle, not a verified express repeal clause.
+- Most likely reality (to be confirmed against the primary text): the two coexist, with the AI Law as the lead specialised regime and the DTI Law's AI labeling/identification duties either retained or absorbed; the "repeals most" claim may refer to practical supersession rather than an express repeal article.
+
+### Gaps
+- The decisive item — the AI Law's final/transitional provisions (the article listing what it amends or repeals) — was NOT read from the primary text. Resolving repeal-vs-coexistence definitively REQUIRES reading that clause in Law 134/2025/QH15 (and cross-checking DTI Law Articles 44–45). This is the single most important open item and should be confirmed from quochoi.vn / vanban.chinhphu.vn before relying on either characterisation.
+
+## Primary-source verification still outstanding (priority order)
+1. AI Law 134/2025/QH15 final/transitional (repeal) article — resolves Q4. (quochoi.vn / vanban.chinhphu.vn)
+2. AI Law article numbers for: labeling/transparency, role duties, risk tiers, prohibited practices (sources read did not print them).
+3. DTI Law 71/2025/QH15 Articles 44–45 exact wording + whether labeling start date is expressly 1 Jan 2026. (Official PDF surfaced at qtsc.com.vn mirror.)
+4. Decree 142/2026/ND-CP (eff. 1 May 2026) — required machine-readable label format/content.
+5. Decision 33/2026/QD-TTg — confirm "litigation" high-risk entry and its exact definition (critical for a legal-AI SaaS).
+6. Whether MOST has issued the "List of AI-created digital technology products" under DTI Art. 44(3).
+
+## Source reliability notes
+- Government/National Assembly (baochinhphu.vn, vietnamnews.vn): authoritative on passage, date, effect, structure — but did NOT print the "134/2025/QH15" number or operative article detail.
+- Allen & Gledhill, Duane Morris, Tilleke, DFDL, MoFo, Baker McKenzie: reputable law-firm alerts; used for operative detail and the coexistence characterisation. Allen & Gledhill gave the most granular role/tier/labeling breakdown.
+- B&Company, Viet An Law, regulations.ai, apolatlegal, casrai, vietnam-ailaw.pages.dev, aicerts.ai: secondary/commercial; used only to corroborate or as the sole source for the disputed "repeals most" claim (flagged). Tier count is reported as three by most sources; one source alleged four — treat three (high/medium/low) as the consensus.
