@@ -1,0 +1,21 @@
+# TraLuat — Postgres (SoR) cho dev. Residency thật = đặt tại VN khi deploy.
+services:
+  postgres:
+    image: postgres:16
+    container_name: traluat-pg
+    environment:
+      POSTGRES_USER: traluat
+      POSTGRES_PASSWORD: traluat
+      POSTGRES_DB: traluat
+    ports:
+      - "5433:5432"   # 5433 host để tránh đụng pg local
+    volumes:
+      - traluat_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U traluat -d traluat"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  traluat_pgdata:
