@@ -12,8 +12,10 @@ import datetime as dt
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
+from collections import defaultdict
+
 from .bitemporal import BitemporalCorruption, EffectStatus
-from .models import NormRelation, Unit, UnitVersion
+from .models import Document, NormRelation, Unit, UnitVersion
 
 # Quan hệ auto-safe (không chi phối hiệu lforce): repeals/replaces/amends KHÔNG ở đây.
 AUTO_SAFE_TYPES = {"cites", "guides", "hierarchy", "conflicts"}
@@ -47,6 +49,52 @@ def reconstruct_as_of(
     if len(rows) > 1:
         raise BitemporalCorruption(f"{eid}@{as_of}: {len(rows)} dòng in-force")
     return rows[0][0] if rows else None
+
+
+# Đơn vị KẾT CẤU (có tiêu đề, thường không có text riêng) vs đơn vị NỘI DUNG.
+_STRUCTURAL = {"phan", "chuong", "muc", "tieu_muc"}
+
+
+def document_as_of(
+    s: Session, frbr_uri: str, as_of: dt.date, lang: str = "vi",
+    known_as_of: dt.datetime | None = None,
+) -> str:
+    """Ghép CẢ VĂN BẢN tại ngày T — M4-fix: duyệt CÂY (parent_id) theo ordinal,
+    KHÔNG ghép phẳng. Đơn vị bị bãi bỏ (tombstone) → bỏ; đơn vị kết cấu (Chương…)
+    không có version → in tiêu đề; đơn vị nội dung in-force → in label + text.
+    """
+    doc = s.scalar(sa.select(Document).where(Document.frbr_uri == frbr_uri))
+    if doc is None:
+        raise LookupError(f"document không tồn tại: {frbr_uri}")
+    units = list(s.scalars(sa.select(Unit).where(Unit.document_id == doc.id)))
+    has_version = set(
+        s.scalars(
+            sa.select(UnitVersion.unit_id).where(
+                UnitVersion.unit_id.in_([u.id for u in units])
+            ).distinct()
+        )
+    )
+    children: dict[int | None, list[Unit]] = defaultdict(list)
+    for u in units:
+        children[u.parent_id].append(u)
+    for kids in children.values():
+        kids.sort(key=lambda u: u.ordinal)
+
+    lines: list[str] = []
+
+    def walk(parent_id: int | None, depth: int) -> None:
+        for u in children.get(parent_id, []):
+            if u.id in has_version:
+                txt = reconstruct_as_of(s, u.eid, as_of, lang, known_as_of)
+                if txt is not None:                       # in-force → in nội dung
+                    lines.append(f"{'  ' * depth}{u.label}. {txt}")
+                # tombstone/not-yet → bỏ dòng của chính nó (vẫn duyệt con)
+            elif u.unit_type in _STRUCTURAL:              # kết cấu → in tiêu đề
+                lines.append(f"{'  ' * depth}{u.label}")
+            walk(u.id, depth + 1)
+
+    walk(None, 0)
+    return "\n".join(lines)
 
 
 def apply_amendment(
