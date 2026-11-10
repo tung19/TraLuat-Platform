@@ -15,7 +15,7 @@ import datetime as dt
 
 import sqlalchemy as sa
 from pgvector.sqlalchemy import Vector
-from sqlalchemy.dialects.postgresql import ExcludeConstraint, TSVECTOR
+from sqlalchemy.dialects.postgresql import ExcludeConstraint, JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -148,6 +148,25 @@ class Chunk(Base):
         sa.Index("ix_chunk_tsv", "tsv", postgresql_using="gin"),
         sa.Index("ix_chunk_hnsw", "embedding", postgresql_using="hnsw",
                  postgresql_ops={"embedding": "vector_cosine_ops"}),
+    )
+
+
+class ReferenceValue(Base):
+    """Reference-data (luồng 3) — bảng tra cứu RULE, HIỆU-LỰC-AWARE (moat: calculator
+    CÓ-NGUỒN-LUẬT). Dataset nào suy-từ-luật BẮT BUỘC mang valid_from/to + source_eid.
+    Đội data đẩy từ Lakehouse qua adapter (idempotent (dataset,key,valid_from,version))."""
+    __tablename__ = "reference_value"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dataset: Mapped[str] = mapped_column(index=True)        # 'muc_phat' · 'thue_suat' …
+    key: Mapped[str]                                        # khoá nghiệp vụ (vd hành vi/mã)
+    value: Mapped[dict] = mapped_column(JSONB)
+    valid_from: Mapped[dt.date]
+    valid_to: Mapped[dt.date | None]
+    source_eid: Mapped[str | None]                         # neo điều luật (hiệu-lực-aware)
+    version: Mapped[str] = mapped_column(default="v1")     # dataset_version (cache/idempotent)
+    __table_args__ = (
+        sa.UniqueConstraint("dataset", "key", "valid_from", "version", name="uq_refval"),
+        sa.Index("ix_refval_lookup", "dataset", "key", "valid_from", "valid_to"),
     )
 
 
