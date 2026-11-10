@@ -9,10 +9,13 @@ from .tenancy import MissingTenant, ResidencyViolation, TenantContext, require_r
 from .egress import DataClass, EgressPolicy, LLMDestination, RouteDecision
 from .audit import AuditEntry, AuditLog
 from .service import LegalService, ServiceResponse
+from .auth import decode_context
+from .rls import rls_ddl, set_tenant
 
 __all__ = [
     "TenantContext", "MissingTenant", "ResidencyViolation", "require_role",
     "EgressPolicy", "DataClass", "LLMDestination", "RouteDecision",
     "AuditLog", "AuditEntry",
     "LegalService", "ServiceResponse",
+    "decode_context", "rls_ddl", "set_tenant",
 ]
