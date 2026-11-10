@@ -32,7 +32,7 @@ body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0
 .abstain{color:#b91c1c;font-weight:600}.ai{font-size:.75rem;color:#64748b}
 textarea,input{font:inherit}</style></head>
 <body><h1>TraLuat — trợ lý pháp lý</h1>
-<p><a href="/graph">→ Đồ thị quy phạm (FR-37)</a> · <a href="/review">→ Rà soát hợp đồng</a> · <a href="/directory">→ Danh bạ geo (FR-39)</a></p>
+<p><a href="/tools">→ Công cụ (hỏi-đáp · so sánh · soạn đơn)</a> · <a href="/graph">→ Đồ thị quy phạm (FR-37)</a> · <a href="/review">→ Rà soát hợp đồng</a> · <a href="/directory">→ Danh bạ geo (FR-39)</a></p>
 <p>Nhập tình tiết + <b>ngày sự kiện</b> (không phải ngày hỏi). Kết quả có
 <b>trích dẫn điều–khoản tại ngày T</b> kèm trạng thái hiệu lực, hoặc
 <b>abstain</b> khi không đủ căn cứ. Mọi output gắn nhãn AI (Luật 71/2025).</p>
@@ -77,6 +77,25 @@ class SubscribeRequest(BaseModel):
     frbr: str                          # văn bản muốn theo dõi (FR-09)
     channel: str | None = None         # record|webhook|email (mặc định record)
     target: str | None = None          # URL webhook / email
+
+
+class LookupRequest(BaseModel):        # FR-11 Q&A grounded (KB công)
+    query: str
+    as_of: str
+    lang: str = "vi"
+
+
+class DraftRequest(BaseModel):         # FR-34/15 soạn đơn/HĐ (tình tiết khách → local)
+    kind: str
+    facts: str
+    as_of: str
+    lang: str = "vi"
+
+
+class JudgmentRequest(BaseModel):      # FR-03 second-opinion (CN-03 high-risk)
+    cited_eids: list[str]
+    expected_governing: list[str]
+    as_of: str
 
 
 # playbook rà soát mặc định (FR Review / omission moat #2) — chuyên gia mở rộng (L14).
@@ -158,6 +177,64 @@ async function load(){const d=await fetchGraph(eid.value);if(!d)return;
 </script>
 <style>#flt label{font-size:.72rem;padding:.1rem .4rem;border-radius:.3rem;color:#fff;margin-right:.2rem}
 #flt input{margin-right:.2rem}</style></body></html>"""
+
+
+_TOOLS_HTML = """<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<title>TraLuat — Công cụ</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><style>
+body{font-family:system-ui,sans-serif;max-width:820px;margin:1.5rem auto;padding:0 1rem}
+section{border:1px solid #e2e8f0;border-radius:.5rem;padding:.8rem 1rem;margin:.8rem 0}
+h2{margin:.2rem 0 .6rem;font-size:1.05rem}input,textarea,button{font:inherit}
+input,textarea{padding:.25rem .4rem}.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.3rem 0}
+pre{background:#f8fafc;padding:.6rem;border-radius:.4rem;white-space:pre-wrap;font-size:.85rem;overflow:auto}
+.cite{font-family:monospace;background:#eef2ff;padding:.05rem .3rem;border-radius:.2rem;margin-right:.2rem}
+.ab{color:#b91c1c;font-weight:600}small{color:#64748b}</style></head><body>
+<h1>TraLuat — công cụ pháp lý</h1>
+<p class=row>Token JWT: <input id="tok" size="46" placeholder="dán Bearer token" style="flex:1"></p>
+
+<section><h2>Hỏi–đáp pháp lý (FR-11)</h2>
+<div class=row><input id="lq" size="40" placeholder="câu hỏi..." style="flex:1" value="vốn pháp định tối thiểu">
+<input id="la" type="date" value="2022-01-01"><button onclick="lookup()">Hỏi</button></div>
+<div id="lout"></div></section>
+
+<section><h2>So sánh văn bản 2 ngày (FR-36)</h2>
+<div class=row>frbr <input id="cf" size="22" value="trl:vn/nd/99/2020">
+T1 <input id="c1" type="date" value="2021-06-01"> T2 <input id="c2" type="date" value="2022-06-01">
+<button onclick="compare()">So</button></div><div id="cout"></div></section>
+
+<section><h2>Soạn đơn từ mẫu (FR-34) · tình tiết khách → local</h2>
+<div class=row>loại <input id="dk" size="14" value="khoi_kien">
+<input id="dd" type="date" value="2022-01-01"></div>
+<textarea id="df" rows="3" style="width:100%" placeholder="tình tiết...">tranh chấp hợp đồng vay</textarea>
+<div class=row><button onclick="draft()">Soạn</button></div><div id="dout"></div></section>
+
+<script>
+const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function hdr(j){const h={'Authorization':'Bearer '+document.getElementById('tok').value};
+  if(j)h['Content-Type']='application/json';return h;}
+function cites(a){return (a||[]).map(c=>'<span class=cite>'+esc(c)+'</span>').join('');}
+async function lookup(){const o=document.getElementById('lout');o.innerHTML='...';
+  const r=await fetch('/lookup',{method:'POST',headers:hdr(1),body:JSON.stringify(
+    {query:lq.value,as_of:la.value})});const d=await r.json();
+  if(r.status!=200){o.innerHTML='<p class=ab>Lỗi '+r.status+'</p>';return;}
+  o.innerHTML=d.abstain?('<p class=ab>⛔ abstain: '+esc(d.reason)+'</p>')
+    :('<pre>'+esc(d.text)+'</pre><p>'+cites(d.citations)+'</p>')
+    +'<small>🤖 AI · route='+esc(d.route.destination)+' · trace='+esc(d.trace_id)+'</small>';}
+async function compare(){const o=document.getElementById('cout');o.innerHTML='...';
+  const q=new URLSearchParams({frbr:cf.value,a:c1.value,b:c2.value});
+  const r=await fetch('/compare?'+q,{headers:hdr()});const d=await r.json();
+  if(r.status!=200){o.innerHTML='<p class=ab>Lỗi '+r.status+': '+esc(JSON.stringify(d))+'</p>';return;}
+  if(!d.changes.length){o.innerHTML='<small>Không có thay đổi giữa 2 ngày.</small>';return;}
+  o.innerHTML=d.changes.map(c=>'<p><span class=cite>'+esc(c.eid)+'</span> <b>'+c.change+'</b><br>'
+    +'<small>T1:</small> '+esc(c.a||'∅')+'<br><small>T2:</small> '+esc(c.b||'∅')+'</p>').join('');}
+async function draft(){const o=document.getElementById('dout');o.innerHTML='...';
+  const r=await fetch('/draft',{method:'POST',headers:hdr(1),body:JSON.stringify(
+    {kind:dk.value,facts:df.value,as_of:dd.value})});const d=await r.json();
+  if(r.status!=200){o.innerHTML='<p class=ab>Lỗi '+r.status+'</p>';return;}
+  o.innerHTML=d.abstain?('<p class=ab>⛔ abstain: '+esc(d.reason)+'</p>')
+    :('<pre>'+esc(d.text)+'</pre><p>'+cites(d.citations)+'</p>')
+    +'<small>🤖 AI · route=local</small>';}
+</script></body></html>"""
 
 
 _DIRECTORY_HTML = """<!doctype html><html lang="vi"><head><meta charset="utf-8">
@@ -290,6 +367,10 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     @app.get("/metrics", response_class=PlainTextResponse)
     def metrics_ep():                  # observability — scrape Prometheus
         return app.state.metrics.render()
+
+    @app.get("/tools", response_class=HTMLResponse)
+    def tools_page():                  # FR-11/36/34 — hỏi-đáp · so sánh · soạn đơn
+        return _TOOLS_HTML
 
     @app.get("/directory", response_class=HTMLResponse)
     def directory_page():              # FR-39 — bản đồ bấm chọn toạ độ → danh bạ gần
@@ -425,5 +506,64 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
                 for p in (resp.adjudication.parties if resp.adjudication else [])
             ],
         }
+
+    @app.post("/lookup")
+    def lookup(body: LookupRequest, ctx: TenantContext = Depends(auth),
+               svc: LegalService = Depends(get_service)):
+        # FR-11 — hỏi–đáp pháp lý KB CÔNG (không tình tiết khách) → egress có thể ra Claude.
+        need(ctx, "viewer", "lawyer", "reviewer", "owner")
+        resp = svc.lookup(body.query, dt.date.fromisoformat(body.as_of), ctx, lang=body.lang)
+        a = resp.answer
+        return {
+            "answered": resp.answered, "trace_id": resp.trace_id, "ai_label": resp.ai_label,
+            "reason": resp.reason, "route": {"destination": resp.route.destination.value},
+            "abstain": a.abstain if a else True,
+            "text": (a.text if a and not a.abstain else ""),
+            "citations": (a.citations if a else []),
+        }
+
+    @app.post("/draft")
+    def draft(body: DraftRequest, ctx: TenantContext = Depends(auth),
+              svc: LegalService = Depends(get_service)):
+        # FR-34/15 — soạn đơn/HĐ từ template, GROUNDED. Tình tiết khách → CHỈ local gateway
+        # (I3 residency, R2 no-failover): local down → abstain, KHÔNG ra Claude.
+        need(ctx, "lawyer", "reviewer", "owner")
+        if not svc.local_gateway.healthy():
+            return {"abstain": True, "reason": "local_unavailable", "ai_label": True}
+        from ..w6 import PetitionDraftService
+        d = PetitionDraftService(svc.s, gateway=svc.local_gateway, nli=svc.nli).draft(
+            body.kind, body.facts, dt.date.fromisoformat(body.as_of),
+            tenant_id=ctx.tenant_id, lang=body.lang)
+        return {"abstain": d.abstain, "reason": d.reason, "text": d.text,
+                "template_id": d.template_id, "citations": d.citations,
+                "ai_label": d.ai_label, "route": "local"}
+
+    @app.get("/compare")
+    def compare(frbr: str, a: str, b: str, lang: str = "vi",
+                ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
+        # FR-36 — so MỘT văn bản tại HAI ngày bất kỳ (bitemporal diff, KB công).
+        need(ctx, "viewer", "lawyer", "reviewer", "owner")
+        from ..w6 import ComplianceDiffService
+        try:
+            diffs = ComplianceDiffService(svc.s).diff(
+                frbr, dt.date.fromisoformat(a), dt.date.fromisoformat(b), lang)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+        return {"frbr": frbr, "as_of_a": a, "as_of_b": b,
+                "changes": [{"eid": u.eid, "change": u.change, "a": u.before, "b": u.after}
+                            for u in diffs]}
+
+    @app.post("/judgment")
+    def judgment(body: JudgmentRequest, ctx: TenantContext = Depends(auth),
+                 svc: LegalService = Depends(get_service)):
+        # FR-03 — second-opinion bản án: CHỈ cờ điều ràng buộc đúng tình huống còn hiệu lực
+        # mà bản án không viện (CN-03 high-risk → HITL + audit; chiều tuỳ nghi → abstain).
+        need(ctx, "lawyer", "reviewer", "owner")
+        from ..w6 import JudgmentAnalysisService
+        f = JudgmentAnalysisService(svc.s).analyze(
+            body.cited_eids, body.expected_governing, dt.date.fromisoformat(body.as_of))
+        return {"flagged": f.flagged, "reason": f.reason,
+                "missing_binding": f.missing_binding, "ai_label": True,
+                "hitl_required": True}            # CN-03: con người quyết định cuối
 
     return app

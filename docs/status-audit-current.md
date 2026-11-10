@@ -54,7 +54,7 @@ CN-01 residency+egress fail-closed ✅ · CN-02 nhãn AI ✅ · CN-03 high-risk 
 bge-m3 (1024d dense cross-lingual) · XNLI mDeBERTa (NLI + element-judge) · VietOCR (OCR dòng VN) — tất cả optional dep, lazy, importorskip.
 
 ## E. Khoảng trống plannable (code được ngay, KHÔNG chờ ngoài)
-1. **API expose L9** — 4 endpoint: `/lookup` (Q&A), `/draft` (petition/HĐ), `/compare` (doc-diff T1↔T2), `/judgment`. Logic+test đã có, chỉ thiếu route+RBAC+UI. ⭐ giá-trị cao, rẻ.
+1. ✅ **ĐÃ XONG — API expose L9**: `POST /lookup` (FR-11) · `POST /draft` (FR-34/15, client→local, R2 no-failover) · `GET /compare` (FR-36 doc-diff T1↔T2) · `POST /judgment` (FR-03, CN-03 HITL). + trang `/tools` (3 form) + RBAC + test (7). 208 passing.
 2. **⚡FR-35.13 thời hiệu tố tụng** (moat-item) + **35.14 đếm ngày/âm-dương** (nền). Tự build dated-logic.
 3. **FR-14 tóm tắt** VB/vụ việc (grounded, cite-or-abstain).
 4. **FR-35 thêm calculator** dùng-nhiều: 35.6 gross↔net, 35.2 GTGT, 35.9 làm thêm giờ.

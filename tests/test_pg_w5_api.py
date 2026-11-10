@@ -173,6 +173,65 @@ def test_alerts_subscribe_viewer_forbidden(client):
     assert client.post("/alerts/subscribe", json={"frbr": FRBR}, headers=hdr).status_code == 403
 
 
+def _viewer():
+    return {"Authorization": f"Bearer {_tok(tenant_id='t1', role='viewer')}"}
+
+
+def test_tools_page(client):
+    r = client.get("/tools")
+    assert r.status_code == 200
+    for frag in ("/lookup", "/compare", "/draft"):    # 3 form gọi đúng endpoint
+        assert frag in r.text
+
+
+def test_lookup_endpoint(client):
+    r = client.post("/lookup", json={"query": "vốn pháp định", "as_of": "2022-01-01"},
+                    headers=_viewer())                     # KB công → viewer OK
+    assert r.status_code == 200
+    d = r.json()
+    assert "abstain" in d and d["ai_label"] and d["trace_id"]
+
+
+def test_compare_endpoint(client):
+    r = client.get("/compare?frbr=trl:vn/nd/99/2020&a=2021-06-01&b=2022-06-01",
+                   headers=_viewer())
+    assert r.status_code == 200
+    d = r.json()
+    assert d["frbr"] == "trl:vn/nd/99/2020" and isinstance(d["changes"], list)
+
+
+def test_compare_missing_doc_404(client):
+    r = client.get("/compare?frbr=trl:vn/nd/khong-co&a=2021-01-01&b=2022-01-01",
+                   headers=_viewer())
+    assert r.status_code == 404
+
+
+def test_draft_endpoint_abstain_no_template(client):
+    # chưa seed template → grounded-draft abstain 'no_template' (chứng minh wiring+gate)
+    r = client.post("/draft", json={"kind": "khoi_kien", "facts": "tranh chấp hợp đồng",
+                                     "as_of": "2022-01-01"}, headers=_lawyer())
+    assert r.status_code == 200
+    d = r.json()
+    assert d["abstain"] is True and d["ai_label"] and d.get("route") in ("local", None)
+
+
+def test_draft_viewer_forbidden(client):
+    r = client.post("/draft", json={"kind": "x", "facts": "y", "as_of": "2022-01-01"},
+                    headers=_viewer())
+    assert r.status_code == 403
+
+
+def test_judgment_endpoint_flags_missing_binding(client):
+    # điều còn hiệu lực @ngày xử mà bản án không viện → cờ (second-opinion)
+    r = client.post("/judgment", json={"cited_eids": [],
+                                       "expected_governing": ["nd99__dieu_1"],
+                                       "as_of": "2022-01-01"}, headers=_lawyer())
+    assert r.status_code == 200
+    d = r.json()
+    assert d["flagged"] is True and "nd99__dieu_1" in d["missing_binding"]
+    assert d["hitl_required"] is True                       # CN-03 high-risk
+
+
 def test_analyze_lawyer_ok(client):
     r = client.post("/analyze", json=BODY,
                     headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='lawyer')}"})
