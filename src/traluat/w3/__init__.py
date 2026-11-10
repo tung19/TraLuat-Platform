@@ -21,6 +21,9 @@ from .gateway import (
 )
 from .stubs import HashEmbedder, HoldNLI, NoopReranker
 from .as_of import AsOfPlan, resolve_as_of
+from .conflict_detect import (
+    ConflictCandidate, ConflictFinding, detect_conflicts, find_and_resolve_conflicts,
+)
 from .orchestrator import Answer, answer_question, answer_with_resolution
 
 __all__ = [
@@ -32,5 +35,6 @@ __all__ = [
     "TenantLeak", "wrap_untrusted",
     "HashEmbedder", "HoldNLI", "NoopReranker",
     "AsOfPlan", "resolve_as_of",
+    "ConflictCandidate", "ConflictFinding", "detect_conflicts", "find_and_resolve_conflicts",
     "Answer", "answer_question", "answer_with_resolution",
 ]

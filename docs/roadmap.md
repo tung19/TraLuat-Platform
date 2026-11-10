@@ -92,7 +92,10 @@ Phase 5  Diện rộng + Portability      ──►  nuốt thị trường + n�
 **W5 — Backend serving (slice-1: lõi bảo mật tất định) — XONG moat vận hành.**
 - `TenantContext` (ép tenant_id, RBAC `require_role`) · `EgressPolicy` (C1: phân loại provenance fail-closed; **R2: dữ liệu khách local-down → DENY/HITL, KHÔNG failover Claude**) · `AuditLog` write-ahead (C5, append-only, ghi route/residency không nội dung) · `LegalService` bọc `ReasoningEngine` (bất biến: không request thiếu tenant_id · mọi response có nhãn AI + trace_id · dữ liệu khách không ra Claude).
 
-**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search · conflict DETECTION (FR-41, model+gold) · W4 Reasoner đa vai LangGraph (Phase 4) · W5 infra-lift (FastAPI/Celery/RLS `FORCE ROW LEVEL SECURITY`/KMS envelope — cắm trên `LegalService`) · W6 platform/JurisdictionPack/workflow UI.
+**FR-41 — Conflict DETECTION (slice-1 tất định) — XONG finding type thứ 3.**
+- `conflict_detect.detect_conflicts`: phát hiện cặp điều xuyên-văn-bản cùng chủ đề nhưng **lệch đại lượng số** (vd thời hạn 30 vs 15 ngày) + quan hệ `conflicts` đã-flag. `find_and_resolve_conflicts` nối thẳng W2 `resolve_conflict` (lex superior/posterior/abstain). "Luật nói A, Thông tư nói B → Luật thắng" chạy được. Defer: mâu thuẫn ngữ nghĩa (A cho phép/B cấm, không số) qua SemanticConflictDetector port (ML).
+
+**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search · conflict ngữ-nghĩa (NLI, FR-41 phần ML) · W4 Reasoner đa vai LangGraph (Phase 4) · W5 infra-lift (FastAPI/Celery/RLS `FORCE ROW LEVEL SECURITY`/KMS) · W6 platform/JurisdictionPack/workflow UI.
 
 ---
 
