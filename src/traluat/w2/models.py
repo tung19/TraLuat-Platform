@@ -40,6 +40,7 @@ class Document(Base):
     date_issued: Mapped[dt.date | None]
     date_effective: Mapped[dt.date | None]
     status: Mapped[str | None]
+    source_hash: Mapped[str | None] = mapped_column(index=True)  # D6: sha256 văn bản gốc (idempotent)
     units: Mapped[list[Unit]] = relationship(back_populates="document")
 
 

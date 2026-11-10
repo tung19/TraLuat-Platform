@@ -14,13 +14,19 @@ from sqlalchemy.orm import Session
 
 
 def rls_ddl(table: str, *, tenant_col: str = "tenant_id") -> list[str]:
-    """Sinh DDL bật RLS cô lập theo tenant cho 1 bảng khách."""
+    """Sinh DDL bật RLS cô lập theo tenant cho 1 bảng khách.
+
+    ★ C2: FORCE (ép cả owner) + default-deny (missing_ok=true → chưa SET var thì
+    current_setting trả NULL → không khớp dòng nào) + WITH CHECK (chặn INSERT sai tenant)."""
+    # NULLIF('','') → NULL: var chưa set hoặc rỗng → không khớp dòng nào (default-deny,
+    # tránh lỗi cast ''::uuid).
+    pred = f"{tenant_col} = nullif(current_setting('app.current_tenant', true), '')::uuid"
     return [
         f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY",
-        f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY",   # ★ C2: ép cả owner
+        f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY",
         f"DROP POLICY IF EXISTS tenant_isolation ON {table}",
-        f"CREATE POLICY tenant_isolation ON {table} "
-        f"USING ({tenant_col} = current_setting('app.current_tenant')::uuid)",
+        f"CREATE POLICY tenant_isolation ON {table} FOR ALL "
+        f"USING ({pred}) WITH CHECK ({pred})",
     ]
 
 

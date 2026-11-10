@@ -7,6 +7,7 @@ văn bản (phased-commencement cấp Điều: dùng unit.effective_date khi có
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 
 import sqlalchemy as sa
 
@@ -61,6 +62,7 @@ def load_to_w2(
     date_issued: dt.date | None = None,
     authority_id: int | None = None,
     effective_overrides: dict[str, dt.date] | None = None,
+    source_hash: str | None = None,
     lang: str = "vi",
 ) -> Document:
     """Ghi Document + Unit (cây) + UnitVersion (bản gốc, valid_from=date_effective).
@@ -80,7 +82,7 @@ def load_to_w2(
     doc = Document(
         frbr_uri=frbr_uri, doc_number=doc_number, doc_type=doc_type,
         date_issued=date_issued, date_effective=date_effective,
-        authority_id=authority_id, status="con_hieu_luc",
+        authority_id=authority_id, status="con_hieu_luc", source_hash=source_hash,
     )
     session.add(doc)
     session.flush()
@@ -132,10 +134,16 @@ def ingest_document(
     if missing:
         raise ValueError(f"metadata thiếu, không ingest: {', '.join(missing)} (doc_slug={doc_slug})")
 
+    # D6: idempotent — cùng frbr_uri đã có → bỏ qua (không raise, không nhân đôi).
+    existing = session.scalar(sa.select(Document).where(Document.frbr_uri == frbr_uri))
+    if existing is not None:
+        return existing, meta
+
+    source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
     authority_id = _resolve_authority(session, meta.authority_name)
     doc = load_to_w2(
         session, frbr_uri=frbr_uri, doc_type=doc_type, date_effective=date_effective,
-        units=build_ingest(text, doc_slug), doc_number=doc_number,
+        units=build_ingest(text, doc_slug), doc_number=doc_number, source_hash=source_hash,
         date_issued=meta.date_issued, authority_id=authority_id,
         effective_overrides=extract_effective_overrides(text, doc_slug), lang=lang,
     )
