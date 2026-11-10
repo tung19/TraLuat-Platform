@@ -75,6 +75,36 @@ def enable_neo4j_sync(driver, *, database: str = "neo4j") -> None:
     repo.register_post_materialize(lambda s, rel: sync_relation(driver, s, rel, database=database))
 
 
+def gds_pagerank(driver, *, graph_name: str = "trl_pr", database: str = "neo4j",
+                 top: int | None = None) -> list[tuple[str, float]]:
+    """GDS PageRank — 'luật TRỌNG TÂM' (được viện dẫn nhiều = ảnh hưởng lớn). Trả
+    [(eid, score)] giảm dần. Cạnh src→dst ⇒ dst (bị dẫn chiếu) nhận điểm cao."""
+    with driver.session(database=database) as s:
+        s.run("CALL gds.graph.drop($g, false)", g=graph_name)
+        s.run("CALL gds.graph.project($g, 'Unit', 'REL')", g=graph_name)
+        rows = s.run(
+            "CALL gds.pageRank.stream($g) YIELD nodeId, score "
+            "RETURN gds.util.asNode(nodeId).eid AS eid, score ORDER BY score DESC",
+            g=graph_name).data()
+        s.run("CALL gds.graph.drop($g, false)", g=graph_name)
+    out = [(r["eid"], r["score"]) for r in rows]
+    return out[:top] if top else out
+
+
+def gds_communities(driver, *, graph_name: str = "trl_cm",
+                    database: str = "neo4j") -> dict[str, int]:
+    """GDS Louvain — gom 'LĨNH VỰC pháp luật' (cụm điều liên kết chặt). {eid: community}."""
+    with driver.session(database=database) as s:
+        s.run("CALL gds.graph.drop($g, false)", g=graph_name)
+        s.run("CALL gds.graph.project($g, 'Unit', {REL:{orientation:'UNDIRECTED'}})", g=graph_name)
+        rows = s.run(
+            "CALL gds.louvain.stream($g) YIELD nodeId, communityId "
+            "RETURN gds.util.asNode(nodeId).eid AS eid, communityId",
+            g=graph_name).data()
+        s.run("CALL gds.graph.drop($g, false)", g=graph_name)
+    return {r["eid"]: r["communityId"] for r in rows}
+
+
 class Neo4jGraphStore:
     def __init__(self, driver, database: str = "neo4j") -> None:
         self.driver = driver

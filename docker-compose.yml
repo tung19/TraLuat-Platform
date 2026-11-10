@@ -74,6 +74,7 @@ services:
     profiles: ["graph"]
     environment:
       NEO4J_AUTH: neo4j/traluat-neo4j-pw
+      NEO4J_PLUGINS: '["graph-data-science"]'   # GDS: PageRank/community
     ports: ["7474:7474", "7687:7687"]
 
 volumes:

@@ -15,7 +15,17 @@ from neo4j import GraphDatabase  # noqa: E402
 from traluat.w1 import build_ingest, load_to_w2  # noqa: E402
 from traluat.w2 import PostgresGraphStore  # noqa: E402
 from traluat.w2.db import make_engine  # noqa: E402
-from traluat.w2.graph_neo4j import Neo4jGraphStore, project_to_neo4j  # noqa: E402
+from traluat.w2.graph_neo4j import (  # noqa: E402
+    Neo4jGraphStore, gds_communities, gds_pagerank, project_to_neo4j)
+
+
+def _has_gds(driver) -> bool:
+    try:
+        with driver.session() as s:
+            s.run("RETURN gds.version()").single()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 from traluat.w2.models import NormRelation, Unit  # noqa: E402
 
 D = dt.date
@@ -110,3 +120,20 @@ def test_neo4j_neighborhood(session: Session, driver):
     nb = Neo4jGraphStore(driver).neighborhood("nd99__dieu_5")
     assert nb["center"] == "nd99__dieu_5"
     assert {e["type"] for e in nb["edges"]} == {"guides"}
+
+
+def test_gds_pagerank_and_community(session: Session, driver):
+    if not _has_gds(driver):
+        pytest.skip("Neo4j không có GDS plugin")
+    # Điều 5 bị viện dẫn NHIỀU NHẤT → PageRank cao nhất ('luật trọng tâm')
+    _edge(session, "nd99__dieu_1", "nd99__dieu_5", "cites")
+    _edge(session, "nd99__dieu_3", "nd99__dieu_5", "cites")
+    _edge(session, "nd99__dieu_1", "nd99__dieu_3", "cites")
+    project_to_neo4j(session, driver)
+
+    pr = gds_pagerank(driver)
+    assert pr[0][0] == "nd99__dieu_5"               # trọng tâm = bị dẫn chiếu nhiều nhất
+
+    comm = gds_communities(driver)
+    # 3 điều liên kết → cùng 1 community
+    assert comm["nd99__dieu_1"] == comm["nd99__dieu_5"] == comm["nd99__dieu_3"]
