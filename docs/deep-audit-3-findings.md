@@ -25,8 +25,9 @@ Rà soát đối-nghịch code mới (L9 endpoints, deadlines/calendar, geo, ale
 ## ⚠️ F3 (latent — GHI NHẬN): 4 test khác vẫn đếm-toàn-bảng
 - `test_pg_bitemporal`(UnitVersion) · `test_pg_w3_indexed`(Chunk) · `test_pg_w5_rls`(AuditLogRow) · `test_pg_phase_d_followup`(Document) dùng `count().select_from(...)` không `where`. Hiện XANH vì chưa seed các bảng đó. **Rủi ro**: seed sau này vào chúng → vỡ. Nên: DB test riêng, hoặc scope mọi count theo khoá. (Chưa sửa — không broken.)
 
-## ⚠️ F4 (robustness — GHI NHẬN): parse ngày ISO lỗi → 500 thay vì 400
-- `dt.date.fromisoformat(...)` trong nhiều endpoint (/lookup,/compare,/deadline,/analyze,/doc) — ngày sai định dạng → ValueError → 500. Pre-existing, rộng. Nên có helper `parse_date()→HTTPException(422)`. (Chưa sửa.)
+## ✅ F4 (robustness — ĐÃ SỬA): parse ngày ISO lỗi → 500 thay vì 400
+- **Lỗi**: `dt.date.fromisoformat(...)` thẳng trong handler (/lookup,/compare,/deadline,/analyze,/doc,/draft,/judgment) → ngày sai/thiếu → ValueError → **500** (lẽ ra lỗi client → 4xx). Gây alert on-call nhầm + client không biết mình sai.
+- **Sửa**: helper `parse_date(s, *, default)` → `HTTPException(422)` cho ngày sai; field bắt buộc thiếu → 422; field tuỳ chọn bỏ trống → default (today/None). Thay 9 call-site. Test `test_bad_date_returns_422_not_500` + `test_optional_date_omitted_still_ok`.
 
 ## ⚠️ F5 (edge — GHI NHẬN): deadline lùi qua ranh giới NĂM
 - `compute_deadline` nạp `ngay_nghi` chỉ cho `raw.year`. Nếu hạn rơi 31/12 rồi lùi sang năm sau → lễ âm năm sau không có trong set (lễ dương built-in vẫn đúng). Edge hiếm. (Chưa sửa.)

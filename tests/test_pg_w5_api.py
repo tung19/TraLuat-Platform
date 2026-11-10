@@ -201,6 +201,24 @@ def test_deadline_endpoint(client):
     assert d["rolled_from"] == "2022-03-19" and d["source_eid"] == "bltts2015__dieu_273"
 
 
+def test_bad_date_returns_422_not_500(client):
+    # F4: ngày sai định dạng là lỗi CLIENT → 422, không phải 500
+    assert client.get("/compare?frbr=trl:vn/nd/99/2020&a=2022-13-99&b=2022-06-01",
+                      headers=_viewer()).status_code == 422
+    assert client.get("/deadline?kind=x&start=hom-nay&as_of=2022-01-01",
+                      headers=_viewer()).status_code == 422
+    assert client.post("/lookup", json={"query": "x", "as_of": ""},
+                       headers=_viewer()).status_code == 422   # thiếu ngày bắt buộc
+    assert client.post("/analyze", json={"facts": "x", "as_of": "2022/01/01"},
+                       headers=_lawyer()).status_code == 422
+
+
+def test_optional_date_omitted_still_ok(client):
+    # as_of tuỳ chọn bỏ trống → mặc định (today/None), KHÔNG 422
+    r = client.get("/doc?frbr=trl:vn/nd/99/2020", headers=_lawyer())
+    assert r.status_code == 200
+
+
 def test_deadline_no_data_404(client):
     r = client.get("/deadline?kind=khong-co&start=2022-01-01&as_of=2022-01-01",
                    headers=_viewer())

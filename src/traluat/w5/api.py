@@ -98,6 +98,22 @@ class JudgmentRequest(BaseModel):      # FR-03 second-opinion (CN-03 high-risk)
     as_of: str
 
 
+_REQUIRED = object()
+
+
+def parse_date(s: str | None, *, default=_REQUIRED) -> dt.date | None:
+    """Parse ngày ISO → lỗi CLIENT (422), không phải 500. `default` cho field tuỳ chọn;
+    thiếu khi bắt buộc → 422 (F4: ngày sai/thiếu là lỗi input, không phải server hỏng)."""
+    if not s:
+        if default is _REQUIRED:
+            raise HTTPException(422, "thiếu ngày (cần YYYY-MM-DD)")
+        return default
+    try:
+        return dt.date.fromisoformat(s)
+    except ValueError:
+        raise HTTPException(422, f"ngày không hợp lệ: {s!r} (cần YYYY-MM-DD)")
+
+
 # playbook rà soát mặc định (FR Review / omission moat #2) — chuyên gia mở rộng (L14).
 _DEFAULT_REVIEW_RULES = [
     {"name": "bảo mật", "any_of": ["bảo mật", "giữ bí mật"]},
@@ -409,7 +425,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
             ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
         # Điều hướng trích dẫn — VĂN BẢN TẠI NGÀY T (L12).
         from ..w2 import repo
-        a = dt.date.fromisoformat(as_of) if as_of else dt.date.today()
+        a = parse_date(as_of, default=dt.date.today())
         return {"frbr": frbr, "as_of": a.isoformat(),
                 "text": repo.document_as_of(svc.s, frbr, a)}
 
@@ -497,7 +513,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
               ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
         # Đồ thị quan hệ quy phạm quanh 1 điều (KB công) — FR-37 visualize.
         from ..w2 import repo
-        a = dt.date.fromisoformat(as_of) if as_of else None
+        a = parse_date(as_of, default=None)
         return repo.neighborhood(svc.s, eid, a, max_hops=min(hops, 3))
 
     @app.post("/analyze")
@@ -512,7 +528,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
             raise HTTPException(403, str(e))
         resp = svc.analyze(
             CaseInput(facts=body.facts, parties=body.parties or []),
-            dt.date.fromisoformat(body.as_of), ctx,   # facts sensitive (I3); probe (B5)
+            parse_date(body.as_of), ctx,   # facts sensitive (I3); probe (B5)
         )
         return {
             "answered": resp.answered,
@@ -536,7 +552,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
                svc: LegalService = Depends(get_service)):
         # FR-11 — hỏi–đáp pháp lý KB CÔNG (không tình tiết khách) → egress có thể ra Claude.
         need(ctx, "viewer", "lawyer", "reviewer", "owner")
-        resp = svc.lookup(body.query, dt.date.fromisoformat(body.as_of), ctx, lang=body.lang)
+        resp = svc.lookup(body.query, parse_date(body.as_of), ctx, lang=body.lang)
         a = resp.answer
         return {
             "answered": resp.answered, "trace_id": resp.trace_id, "ai_label": resp.ai_label,
@@ -561,7 +577,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
                     "ai_label": True, "trace_id": tid}
         from ..w6 import PetitionDraftService
         d = PetitionDraftService(svc.s, gateway=svc.local_gateway, nli=svc.nli).draft(
-            body.kind, body.facts, dt.date.fromisoformat(body.as_of),
+            body.kind, body.facts, parse_date(body.as_of),
             tenant_id=ctx.tenant_id, lang=body.lang)
         svc.audit.confirm(intent, "done")
         return {"abstain": d.abstain, "reason": d.reason, "text": d.text,
@@ -574,9 +590,9 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         # FR-35.13 — thời hiệu/thời hạn tố tụng@as_of (neo điều luật, lùi ngày nghỉ).
         need(ctx, "viewer", "lawyer", "reviewer", "owner")
         from ..w1.deadlines import compute_deadline
-        a = dt.date.fromisoformat(as_of) if as_of else dt.date.today()
+        a = parse_date(as_of, default=dt.date.today())
         try:
-            r = compute_deadline(svc.s, kind, dt.date.fromisoformat(start), a)
+            r = compute_deadline(svc.s, kind, parse_date(start), a)
         except LookupError as e:
             raise HTTPException(404, str(e))
         return {"kind": r.kind, "moc_bat_dau": r.moc_bat_dau.isoformat(),
@@ -592,7 +608,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         from ..w6 import ComplianceDiffService
         try:
             diffs = ComplianceDiffService(svc.s).diff(
-                frbr, dt.date.fromisoformat(a), dt.date.fromisoformat(b), lang)
+                frbr, parse_date(a), parse_date(b), lang)
         except LookupError as e:
             raise HTTPException(404, str(e))
         return {"frbr": frbr, "as_of_a": a, "as_of_b": b,
@@ -610,7 +626,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
                               destination="none", resource="judgment")
         from ..w6 import JudgmentAnalysisService
         f = JudgmentAnalysisService(svc.s).analyze(
-            body.cited_eids, body.expected_governing, dt.date.fromisoformat(body.as_of))
+            body.cited_eids, body.expected_governing, parse_date(body.as_of))
         svc.audit.confirm(intent, "done")
         return {"flagged": f.flagged, "reason": f.reason,
                 "missing_binding": f.missing_binding, "ai_label": True,
