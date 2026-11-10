@@ -13,7 +13,9 @@ dependencies = [
 
 [project.optional-dependencies]
 models = [
+    "protobuf>=7.36.2",
     "sentence-transformers>=6.2.0",
+    "sentencepiece>=0.2.3",
     "torch>=2.15.0",
     "transformers>=5.22.2",
 ]
