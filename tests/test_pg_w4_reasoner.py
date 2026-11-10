@@ -93,8 +93,9 @@ def test_adjudicator_rejects_citation_outside_verified(session: Session):
     assert adj.parties[0].abstain
 
 
-def test_multi_role_deferred(session: Session):
+def test_multi_role_via_analyze(session: Session):
     _seed(session)
     eng = ReasoningEngine(session, gateway=EchoLLMGateway())
-    with pytest.raises(NotImplementedError):
-        eng.analyze(CaseInput(facts="x"), as_of=D(2022, 1, 1), mode="multi_role")
+    adj = eng.analyze(CaseInput(facts="vốn pháp định tối thiểu"),
+                      as_of=D(2022, 1, 1), mode="multi_role")
+    assert adj.verified_articles and not adj.parties[0].abstain

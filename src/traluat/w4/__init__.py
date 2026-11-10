@@ -13,9 +13,11 @@ Adjudicator per-party, Reasoner đa vai LangGraph, nối GroundingService hậu-
 from .types import Article, AuditEntry, AuditResult, Precedent
 from .auditor import Auditor, ElementJudge, KeywordElementJudge, prune_unsupported
 from .reasoner import Adjudication, CaseInput, PartyResult, ReasoningEngine
+from .multi_role import DebateResult, MultiRoleReasoner, RoleConfig, Utterance
 
 __all__ = [
     "Article", "Precedent", "AuditEntry", "AuditResult",
     "Auditor", "ElementJudge", "KeywordElementJudge", "prune_unsupported",
     "CaseInput", "PartyResult", "Adjudication", "ReasoningEngine",
+    "MultiRoleReasoner", "RoleConfig", "Utterance", "DebateResult",
 ]

@@ -64,6 +64,7 @@ class ReasoningEngine:
         self.s = session
         self.gateway = gateway
         self.nli = nli
+        self.element_judge = element_judge
         self.auditor = Auditor(session, element_judge)
         self.elements_by_eid = elements_by_eid or {}
 
@@ -102,9 +103,15 @@ class ReasoningEngine:
         self, case: CaseInput, as_of: dt.date, *,
         mode: Literal["single", "multi_role"] = "single",
         tenant_id: str | None = None, lang: str = "vi", top_k: int = 8,
+        case_id: str = "case",
     ) -> Adjudication:
         if mode == "multi_role":
-            raise NotImplementedError("Reasoner đa vai = Phase 4 (§5) — chưa build")
+            from .multi_role import MultiRoleReasoner
+            mr = MultiRoleReasoner(
+                self.s, gateway=self.gateway, nli=self.nli,
+                element_judge=self.element_judge, elements_by_eid=self.elements_by_eid,
+                top_k=top_k)
+            return mr.run(case, as_of, tenant_id=tenant_id, case_id=case_id, lang=lang).adjudication
 
         parties = case.parties or ["(chung)"]
         results, all_verified, trail = [], [], []
