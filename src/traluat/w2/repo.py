@@ -13,7 +13,9 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from collections import defaultdict
+from dataclasses import dataclass, field
 
+from .. import legal_rule_base as lrb
 from .bitemporal import BitemporalCorruption, EffectStatus
 from .models import Document, NormRelation, Unit, UnitVersion
 
@@ -268,6 +270,74 @@ def correct_valid_from(
         )
     )
     s.flush()
+
+
+# ── §4: resolve_conflict (deterministic; cổng-hiệu-lforce-TRƯỚC → lex rules → abstain) ──
+@dataclass
+class ConflictResult:
+    winner_eid: str | None
+    losers: list[tuple[str, str]] = field(default_factory=list)  # (eid, lý do/status)
+    rule: str = ""              # lex_superior | lex_posterior | abstain:<reason>
+    explanation: str = ""
+    unresolved: bool = False    # True → đẩy HUMAN (principle #6), không auto
+
+
+def resolve_conflict(
+    s: Session, eids: list[str], as_of: dt.date, question_type: str = "general",
+) -> ConflictResult:
+    """Giải tập điều ĐÃ-được-flag là chọi nhau. KHÔNG tự phát hiện (đó là FR-41).
+
+    ① Cổng hiệu lực (effect_status@as_of): hết hiệu lực → cite nhưng KHÔNG tranh thắng.
+    ② lex superior (authority_rank@as_of, rule base) → ③ lex posterior (cùng rank, mới hơn)
+    → ④ hoà / rank mơ hồ / không-in-force → ABSTAIN→human.
+    """
+    items = []
+    for eid in eids:
+        row = s.execute(
+            sa.select(Document.doc_type, Document.date_effective)
+            .join(Unit, Unit.document_id == Document.id).where(Unit.eid == eid)
+        ).first()
+        if row is None:
+            raise LookupError(f"unit eid không tồn tại: {eid}")
+        st = effect_status(s, eid, as_of)
+        items.append({
+            "eid": eid, "doc_type": row.doc_type, "date_effective": row.date_effective,
+            "status": st, "rank": lrb.rank_of(row.doc_type, as_of),
+        })
+
+    # ① cổng hiệu lực
+    eligible = [it for it in items if it["status"] in (EffectStatus.IN_FORCE, EffectStatus.TRANSITIONAL_APPLIES)]
+    all_losers = [(it["eid"], it["status"].value) for it in items]
+
+    if not eligible:
+        return ConflictResult(None, all_losers, "abstain:no_in_force",
+                              "Không bên nào còn hiệu lực @as_of → human.", unresolved=True)
+    if any(it["rank"] is None for it in eligible):
+        return ConflictResult(None, all_losers, "abstain:rank_undetermined",
+                              "doc_type mơ hồ (thiếu cơ quan) → human.", unresolved=True)
+
+    def losers_except(win_eid):
+        return [(it["eid"], it["status"].value) for it in items if it["eid"] != win_eid]
+
+    # ② lex superior
+    max_rank = max(it["rank"] for it in eligible)
+    top = [it for it in eligible if it["rank"] == max_rank]
+    if len(top) == 1:
+        w = top[0]
+        return ConflictResult(w["eid"], losers_except(w["eid"]), "lex_superior",
+                              f"Hiệu lforce cao nhất (rank {max_rank}) thắng.")
+
+    # ③ lex posterior (cùng rank — scaffold xấp xỉ 'cùng cơ quan'; mới hơn thắng)
+    dates = [it["date_effective"] for it in top]
+    if all(d is not None for d in dates) and len(set(dates)) == len(dates):
+        w = max(top, key=lambda it: it["date_effective"])
+        return ConflictResult(w["eid"], losers_except(w["eid"]), "lex_posterior",
+                              "Cùng rank → ban hành/hiệu lực sau thắng.")
+
+    # ④ hoà / posterior⟂specialis → ABSTAIN (principle #6)
+    return ConflictResult(None, all_losers, "abstain:tie",
+                          "Cùng rank không phân định (posterior⟂specialis/cùng ngày) → human.",
+                          unresolved=True)
 
 
 # ── §5.1: multihop norm-graph (FK + recursive CTE; bounded + cycle-safe + as_of) ──
