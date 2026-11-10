@@ -45,7 +45,7 @@
 | **FR-34** | **Soạn ĐƠN TỪ pháp lý theo mẫu** (khởi kiện/khiếu nại/tố giác…) — học từ kho mẫu (RAG, không fine-tune) | W6 §1.2b (PetitionDraftService) + DTP (L10) + TES (W3) | ✅ **DONE** | `PetitionDraftService` grounded + `/draft` (client→local) + template store. |
 | **FR-16** | Rà soát hợp đồng | W6 §1.1 (ReviewService) | ✅ **DONE** | `ReviewService` (chung FR-02). |
 | **FR-17** | Multi-tenant (RLS, cô lập) | W5 §2 | ✅ **DONE** | FORCE RLS + role non-owner + chống IDOR. |
-| **FR-18** | Giao diện song ngữ | W6 §3 (L12) | 🟡 **WIP** | UI hiện VI-only; EN chưa. |
+| **FR-18** | Giao diện song ngữ | W6 §3 (L12) | ✅ **DONE** | `?lang=en` dịch nhãn UI (index + /tools) + toggle VI/EN. |
 
 ---
 
@@ -148,8 +148,8 @@
 ## 📊 Rollup trạng thái (đối chiếu code 2026-11-10)
 
 **41 FR chính + 14 mục FR-35.x + 6 CN:**
-- ✅ **DONE (26 FR)**: FR-01,02,03,05,06,07,09,10,11,12,13,16,17,19,21,22,23,24,25,26,27,28,29,30,34,36,37,39,40 *(≈29 incl. tiện ích)*
-- 🟡 **WIP (3)**: FR-04 (EN xong/ZH defer) · FR-15 (draft generic) · FR-18 (UI VI-only) · FR-20 (thiếu đo scan)
+- ✅ **DONE (28 FR)**: FR-01,02,03,05,06,07,09,10,11,12,13,16,17,19,21,22,23,24,25,26,27,28,29,30,34,36,37,39,40 *(≈29 incl. tiện ích)*
+- 🟡 **WIP (3)**: FR-04 (EN xong/ZH defer) · FR-15 (draft generic) · FR-20 (thiếu đo scan)
 - ❌ **SPEC chưa code (1)**: FR-08 ComplianceAdvisory
 - 🔵 **DEFER theo spec (3+1)**: FR-31,32,33 + FR-04-ZH
 - **FR-35.x**: **14/14 DONE** (công thức+lịch tính đúng; lookup cần data thật)

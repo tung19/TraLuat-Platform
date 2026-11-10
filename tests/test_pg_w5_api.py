@@ -182,6 +182,15 @@ def test_tools_page(client):
     assert r.status_code == 200
     for frag in ("/lookup", "/summarize", "/compare", "/draft", "/deadline"):   # form endpoints
         assert frag in r.text
+    assert "Hỏi–đáp pháp lý" in r.text and "?lang=en" in r.text   # VI + toggle
+
+
+def test_tools_page_english(client):
+    r = client.get("/tools?lang=en")                   # FR-18 song ngữ
+    assert r.status_code == 200
+    assert "Legal Q&A" in r.text and "Summarize law" in r.text
+    assert "Hỏi–đáp pháp lý" not in r.text             # đã dịch nhãn
+    assert "/lookup" in r.text                         # endpoint giữ nguyên
 
 
 def test_deadline_endpoint(client):

@@ -202,6 +202,36 @@ async function load(){const d=await fetchGraph(eid.value);if(!d)return;
 #flt input{margin-right:.2rem}</style></body></html>"""
 
 
+# FR-18 — i18n UI: thay nhãn VI→EN khi ?lang=en (nội dung pháp lý vẫn theo `lang` API).
+_EN_MAP = {
+    "công cụ pháp lý": "legal tools",
+    "Hỏi–đáp pháp lý": "Legal Q&A", "Tóm tắt quy định": "Summarize law",
+    "Thời hiệu / thời hạn tố tụng": "Limitation / procedural deadline",
+    "So sánh văn bản 2 ngày": "Compare document (two dates)",
+    "Soạn đơn từ mẫu": "Draft petition from template",
+    "tình tiết khách → local": "client facts → local",
+    "dán Bearer token": "paste Bearer token",
+    "chủ đề...": "topic...", "câu hỏi...": "question...", "tình tiết...": "facts...",
+    "mốc bắt đầu": "start date", "loại": "type", "bán kính": "radius",
+    ">Hỏi<": ">Ask<", ">Tóm tắt<": ">Summarize<", ">Tính<": ">Compute<",
+    ">So<": ">Compare<", ">Soạn<": ">Draft<",
+    "TraLuat — trợ lý pháp lý": "TraLuat — legal assistant",
+    "Đồ thị quy phạm": "Norm graph", "Rà soát hợp đồng": "Contract review",
+    "Danh bạ geo": "Geo directory",
+    "Phân tích": "Analyze", "ngày sự kiện": "event date",
+}
+
+
+def _i18n(html: str, lang: str) -> str:
+    """Thay nhãn UI sang EN khi lang='en' (FR-18). Chèn thanh chuyển ngữ."""
+    toggle = ('<p style="text-align:right;font-size:.8rem">'
+              '<a href="?lang=vi">VI</a> | <a href="?lang=en">EN</a></p>')
+    if lang == "en":
+        for vi, en in _EN_MAP.items():
+            html = html.replace(vi, en)
+    return html.replace("<body>", "<body>" + toggle, 1)
+
+
 _TOOLS_HTML = """<!doctype html><html lang="vi"><head><meta charset="utf-8">
 <title>TraLuat — Công cụ</title>
 <meta name="viewport" content="width=device-width,initial-scale=1"><style>
@@ -420,16 +450,16 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         return {"status": "ok"}
 
     @app.get("/", response_class=HTMLResponse)
-    def index():                       # W7 Experience (tối thiểu) — form + nhãn AI
-        return _INDEX_HTML
+    def index(lang: str = "vi"):       # W7 Experience + FR-18 song ngữ (?lang=en)
+        return _i18n(_INDEX_HTML, lang)
 
     @app.get("/metrics", response_class=PlainTextResponse)
     def metrics_ep():                  # observability — scrape Prometheus
         return app.state.metrics.render()
 
     @app.get("/tools", response_class=HTMLResponse)
-    def tools_page():                  # FR-11/36/34 — hỏi-đáp · so sánh · soạn đơn
-        return _TOOLS_HTML
+    def tools_page(lang: str = "vi"):  # FR-11/36/34 + FR-18 song ngữ (?lang=en)
+        return _i18n(_TOOLS_HTML, lang)
 
     @app.get("/directory", response_class=HTMLResponse)
     def directory_page():              # FR-39 — bản đồ bấm chọn toạ độ → danh bạ gần
