@@ -85,10 +85,11 @@ Phase 5  Diện rộng + Portability      ──►  nuốt thị trường + n�
 - **Gold set effectivity/omission/conflict** → `GoldCase` vào `run_eval`, bật CI gate.
 - **primary-text** → điền số `authority_rank` 2025 trong `legal_rule_base` (gỡ provisional).
 
-**W4 — Reasoning engine (slice-1: Auditor HARD-GATE) — XONG moat.**
-- `auditor.audit`: cổng TIỀN-output 3 tầng — (1) trích dẫn có thật · (3) ngày hiệu lực (cắm `repo.citable_text`; TRANSITIONAL giữ+đánh dấu, H3 version-match; rớt → KHÔNG tốn lời gọi) · (2) **element-wise** (áp dụng ⇔ MỌI yếu tố thoả, không holistic) · `prune_unsupported` (án lệ mất điểm tựa → bỏ). `ElementJudge` port + stub. `audit_trail` giữ mọi điều + lý do loại.
+**W4 — Reasoning engine (Auditor hard-gate + orchestrator một-lượt) — XONG moat + engine.**
+- `auditor.audit`: cổng TIỀN-output 3 tầng — (1) trích dẫn có thật · (3) ngày hiệu lực (cắm `repo.citable_text`; TRANSITIONAL giữ+đánh dấu, H3 version-match; rớt → KHÔNG tốn lời gọi) · (2) **element-wise** (áp dụng ⇔ MỌI yếu tố thoả, không holistic) · `prune_unsupported`. `ElementJudge` port + stub. `audit_trail` giữ mọi điều + lý do loại.
+- `ReasoningEngine.analyze` (mode='single'): per-party `Researcher`(uỷ W3 `retrieve`)→`Auditor`→`Adjudicator`. Hợp đồng thu hẹp (verified ⊆ candidate), verified-set rỗng → **abstain insufficient_basis** (H1), cổng hậu-draft = W3 `ground`. Interface `Adjudication` cho W5/W6.
 
-**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search · conflict DETECTION (FR-41, model+gold) · W4 Researcher→Adjudicator per-party + Reasoner đa vai LangGraph · W5/W6 platform.
+**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search · conflict DETECTION (FR-41, model+gold) · W4 Reasoner đa vai LangGraph (mode='multi_role', Phase 4) · W5 backend/tenancy · W6 platform/JurisdictionPack.
 
 ---
 
