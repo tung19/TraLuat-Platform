@@ -66,6 +66,7 @@ class AnalysisTask(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, nullable=False, index=True)
     kind: Mapped[str]                                  # analyze | lookup
     status: Mapped[str] = mapped_column(default="queued")   # queued|running|done|error
+    payload: Mapped[dict | None] = mapped_column(JSONB)     # input để worker tái dựng job
     result: Mapped[dict | None] = mapped_column(JSONB)
     error: Mapped[str | None]
     created_at: Mapped[dt.datetime] = mapped_column(

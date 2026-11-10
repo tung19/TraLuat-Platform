@@ -29,6 +29,44 @@ services:
     container_name: traluat-redis
     ports: ["6379:6379"]
     profiles: ["async"]
+  worker:
+    image: python:3.12-slim
+    container_name: traluat-worker
+    profiles: ["async"]
+    depends_on: [postgres, rabbitmq, redis]
+    working_dir: /app
+    volumes: ["./:/app"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://traluat:traluat@postgres:5432/traluat
+      CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    command: >-
+      sh -c "pip install -e . && celery -A traluat.w5.celery_app.celery_app worker -l info"
+
+  # API + observability (profile 'obs'): `docker compose --profile obs up`
+  api:
+    image: python:3.12-slim
+    container_name: traluat-api
+    profiles: ["obs"]
+    depends_on: [postgres]
+    working_dir: /app
+    volumes: ["./:/app"]
+    ports: ["8000:8000"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://traluat:traluat@postgres:5432/traluat
+    command: >-
+      sh -c "pip install -e . && uvicorn traluat.w5.asgi:app --host 0.0.0.0 --port 8000"
+  prometheus:
+    image: prom/prometheus
+    container_name: traluat-prom
+    profiles: ["obs"]
+    ports: ["9090:9090"]
+    volumes: ["./deploy/prometheus.yml:/etc/prometheus/prometheus.yml"]
+  grafana:
+    image: grafana/grafana
+    container_name: traluat-grafana
+    profiles: ["obs"]
+    ports: ["3000:3000"]
 
 volumes:
   traluat_pgdata:

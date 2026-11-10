@@ -24,19 +24,38 @@ from .service import LegalService
 from .tenancy import MissingTenant, TenantContext, require_role
 
 _INDEX_HTML = """<!doctype html><html lang="vi"><head><meta charset="utf-8">
-<title>TraLuat</title></head><body style="font-family:sans-serif;max-width:720px;margin:2rem auto">
-<h1>TraLuat — trợ lý pháp lý</h1>
-<p>Nhập tình tiết + ngày sự kiện. Kết quả có <b>trích dẫn điều–khoản tại ngày T</b>,
-hoặc <b>abstain</b> khi không đủ căn cứ. Mọi output gắn nhãn AI.</p>
-<form id="f"><textarea id="facts" rows="4" style="width:100%" placeholder="tình tiết..."></textarea>
-<input id="asof" value="2022-01-01"> <button>Phân tích</button></form>
-<pre id="out"></pre>
+<title>TraLuat</title><style>
+body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem}
+.badge{font-size:.75rem;padding:.1rem .4rem;border-radius:.3rem;color:#fff}
+.in_force{background:#16a34a}.expired_citable{background:#b91c1c}.transitional_applies{background:#ca8a04}
+.cite{font-family:monospace;background:#f1f5f9;padding:.1rem .3rem;border-radius:.2rem}
+.abstain{color:#b91c1c;font-weight:600}.ai{font-size:.75rem;color:#64748b}
+textarea,input{font:inherit}</style></head>
+<body><h1>TraLuat — trợ lý pháp lý</h1>
+<p>Nhập tình tiết + <b>ngày sự kiện</b> (không phải ngày hỏi). Kết quả có
+<b>trích dẫn điều–khoản tại ngày T</b> kèm trạng thái hiệu lực, hoặc
+<b>abstain</b> khi không đủ căn cứ. Mọi output gắn nhãn AI (Luật 71/2025).</p>
+<form id="f">
+<textarea id="facts" rows="4" style="width:100%" placeholder="tình tiết vụ việc...">vốn pháp định tối thiểu của doanh nghiệp</textarea>
+<label>as_of <input id="asof" type="date" value="2022-01-01"></label>
+<button>Phân tích</button>
+<p class="ai">Token JWT: <input id="tok" size="40" placeholder="dán Bearer token"></p></form>
+<div id="out"></div>
 <script>
-f.onsubmit=async e=>{e.preventDefault();out.textContent='...';
+const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+f.onsubmit=async e=>{e.preventDefault();out.innerHTML='<p>...</p>';
  const r=await fetch('/analyze',{method:'POST',headers:{'Content-Type':'application/json',
-  'Authorization':'Bearer '+(localStorage.tok||'')},
+  'Authorization':'Bearer '+tok.value},
   body:JSON.stringify({facts:facts.value,as_of:asof.value})});
- out.textContent=JSON.stringify(await r.json(),null,2);};
+ const d=await r.json();
+ if(r.status!==200){out.innerHTML='<p class=abstain>Lỗi '+r.status+': '+esc(JSON.stringify(d))+'</p>';return;}
+ let h='<p class=ai>🤖 nội dung AI · route='+d.route.destination+' · trace='+d.trace_id+'</p>';
+ for(const p of (d.parties||[])){
+   if(p.abstain){h+='<p class=abstain>⛔ '+esc(p.party)+': abstain ('+esc(p.reason)+')</p>';continue;}
+   h+='<p><b>'+esc(p.party)+'</b>: '+esc(p.relief)+'</p><p>Căn cứ: ';
+   for(const c of (p.citations||[])) h+='<span class=cite>'+esc(c)+'</span> ';
+   h+='</p>';}
+ out.innerHTML=h;};
 </script></body></html>"""
 
 

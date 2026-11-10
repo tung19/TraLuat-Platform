@@ -12,6 +12,7 @@ dependencies = [
     "pgvector>=0.3",
     "celery>=5.3",
     "cryptography>=42",
+    "uvicorn>=0.54.0",
 ]
 
 [project.optional-dependencies]
