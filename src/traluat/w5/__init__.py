@@ -8,7 +8,8 @@ FastAPI/Celery/RLS (infra lift PAKTON) cắm trên lõi này sau. Spec: docs/spe
 from .tenancy import MissingTenant, ResidencyViolation, TenantContext, require_role
 from .egress import DataClass, EgressPolicy, LLMDestination, RouteDecision
 from .audit import AuditEntry, AuditLog, PostgresAuditLog
-from .models import AuditLogRow, Tenant, TenantUser
+from .models import AnalysisTask, AuditLogRow, Tenant, TenantUser
+from .tasks import CeleryTaskQueue, InMemoryTaskQueue, TaskQueue, TaskRunner
 from .service import LegalService, ServiceResponse
 from .auth import decode_context
 from .rls import rls_ddl, set_tenant
@@ -17,7 +18,8 @@ __all__ = [
     "TenantContext", "MissingTenant", "ResidencyViolation", "require_role",
     "EgressPolicy", "DataClass", "LLMDestination", "RouteDecision",
     "AuditLog", "AuditEntry", "PostgresAuditLog",
-    "Tenant", "TenantUser", "AuditLogRow",
+    "Tenant", "TenantUser", "AuditLogRow", "AnalysisTask",
+    "TaskRunner", "TaskQueue", "InMemoryTaskQueue", "CeleryTaskQueue",
     "LegalService", "ServiceResponse",
     "decode_context", "rls_ddl", "set_tenant",
 ]

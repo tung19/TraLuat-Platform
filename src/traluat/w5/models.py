@@ -56,3 +56,17 @@ class AuditLogRow(Base):
     ts: Mapped[dt.datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now())
     meta: Mapped[dict | None] = mapped_column(JSONB)
+
+
+class AnalysisTask(Base):
+    """Task bất đồng bộ — bảng khách, tenant_id + FORCE RLS → /tasks/{id} chống IDOR
+    (C6): fetch task tenant khác → RLS trả rỗng (không thấy)."""
+    __tablename__ = "analysis_task"
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, nullable=False, index=True)
+    kind: Mapped[str]                                  # analyze | lookup
+    status: Mapped[str] = mapped_column(default="queued")   # queued|running|done|error
+    result: Mapped[dict | None] = mapped_column(JSONB)
+    error: Mapped[str | None]
+    created_at: Mapped[dt.datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now())

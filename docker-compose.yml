@@ -18,5 +18,17 @@ services:
       timeout: 3s
       retries: 20
 
+  # Async task layer (W5 §1) — broker + result backend. Dev; test dùng InMemoryTaskQueue.
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: traluat-rmq
+    ports: ["5672:5672", "15672:15672"]
+    profiles: ["async"]      # `docker compose --profile async up` mới bật
+  redis:
+    image: redis:7
+    container_name: traluat-redis
+    ports: ["6379:6379"]
+    profiles: ["async"]
+
 volumes:
   traluat_pgdata:
