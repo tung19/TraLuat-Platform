@@ -19,6 +19,7 @@ from .source import (
     RawDocument,
     ingest_source,
 )
+from .ocr import NoOCR, OCREngine, PassthroughOCR
 
 __all__ = [
     "ParsedUnit",
@@ -40,4 +41,7 @@ __all__ = [
     "RawDocument",
     "IngestOutcome",
     "ingest_source",
+    "OCREngine",
+    "NoOCR",
+    "PassthroughOCR",
 ]

@@ -22,12 +22,13 @@ from .ingest import ingest_document
 @dataclass
 class RawDocument:
     doc_slug: str                 # prefix eId ổn định (vd 'nd99')
-    text: str                     # nguyên văn (đã OCR/chuẩn hoá phía data)
+    text: str = ""                # nguyên văn (đã OCR/chuẩn hoá phía data)
     frbr_uri: str | None = None   # override metadata nếu đội data đã chuẩn hoá
     doc_type: str | None = None
     date_effective: dt.date | None = None
     doc_number: str | None = None
     lang: str = "vi"
+    image_ref: bytes | None = None  # ảnh thô → OCR khi text rỗng
 
 
 @runtime_checkable
@@ -74,14 +75,22 @@ class IngestOutcome:
 
 
 def ingest_source(
-    session, source: DocumentSource, *, since: dt.date | None = None,
+    session, source: DocumentSource, *, since: dt.date | None = None, ocr=None,
 ) -> IngestOutcome:
-    """Nạp cả mẻ từ nguồn → W2. Lỗi 1 văn bản không chặn mẻ (ghi vào failed)."""
+    """Nạp cả mẻ từ nguồn → W2. Lỗi 1 văn bản không chặn mẻ (ghi vào failed).
+
+    ocr = OCREngine (w1.ocr): văn bản chỉ có `image_ref` (text rỗng) → OCR trước.
+    Thiếu ocr mà rỗng text → văn bản đó vào `failed` (không nạp bừa)."""
     out = IngestOutcome()
     for raw in source.fetch(since):
         try:
+            text = raw.text
+            if not text and raw.image_ref is not None:
+                if ocr is None:
+                    raise ValueError("văn bản chỉ có ảnh nhưng chưa cấu hình OCR")
+                text = ocr.extract(raw.image_ref, raw.lang)
             doc, _ = ingest_document(
-                session, raw.text, raw.doc_slug, frbr_uri=raw.frbr_uri,
+                session, text, raw.doc_slug, frbr_uri=raw.frbr_uri,
                 doc_type=raw.doc_type, date_effective=raw.date_effective,
                 doc_number=raw.doc_number, lang=raw.lang,
             )

@@ -8,8 +8,16 @@ HoldNLI: luôn 'hold' (không PROMOTE, không veto) — gate3 trung tính tới 
 from __future__ import annotations
 
 import hashlib
+import re
+import unicodedata
 
 from .ports import NLIVerdict
+
+_TOK = re.compile(r"\w+", re.UNICODE)
+
+
+def _toks(s: str) -> set[str]:
+    return {t for t in _TOK.findall(unicodedata.normalize("NFC", s).lower()) if len(t) > 1}
 
 
 class HashEmbedder:
@@ -33,3 +41,20 @@ class NoopReranker:
 class HoldNLI:
     def supports(self, claim: str, source: str) -> NLIVerdict:
         return "hold"
+
+
+class KeywordNLIVerifier:
+    """STUB tất định — 'promote' nếu phần lớn từ của claim có trong nguồn, else 'hold'.
+
+    Chỗ-giữ cho NLI thật (ViLegalBERT / LLM-as-NLI structured {support, span}).
+    gate3 chỉ PROMOTE/HOLD (không veto) nên stub lạc quan vẫn an toàn.
+    """
+
+    def __init__(self, threshold: float = 0.6) -> None:
+        self.threshold = threshold
+
+    def supports(self, claim: str, source: str) -> NLIVerdict:
+        ct = _toks(claim)
+        if not ct:
+            return "hold"
+        return "promote" if len(ct & _toks(source)) / len(ct) >= self.threshold else "hold"

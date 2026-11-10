@@ -15,6 +15,7 @@ import datetime as dt
 import re
 import unicodedata
 from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
@@ -69,11 +70,27 @@ class ConflictFinding:
     resolution: "repo.ConflictResult"
 
 
+@runtime_checkable
+class SemanticConflictDetector(Protocol):
+    """Phát hiện mâu thuẫn NGỮ NGHĨA (A cho phép / B cấm — không số). Cắm NLI/model."""
+    def detect(self, pairs: list[tuple[str, str, str, str]]) -> list[ConflictCandidate]:
+        ...  # pairs = (eid_a, text_a, eid_b, text_b)
+
+
+class NoSemantic:
+    """Stub — chưa cắm model ngữ nghĩa (chỉ dò mâu thuẫn số)."""
+    def detect(self, pairs: list[tuple[str, str, str, str]]) -> list[ConflictCandidate]:
+        return []
+
+
 def detect_conflicts(
     session: Session, scope_frbr_uris: list[str], as_of: dt.date, *,
-    min_topic_overlap: int = 2, lang: str = "vi",
+    min_topic_overlap: int = 2, lang: str = "vi", semantic: SemanticConflictDetector | None = None,
 ) -> list[ConflictCandidate]:
-    """Tìm cặp điều (KHÁC văn bản) nghi xung đột tại as_of. Chỉ áp-dụng-được."""
+    """Tìm cặp điều (KHÁC văn bản) nghi xung đột tại as_of. Chỉ áp-dụng-được.
+
+    semantic = SemanticConflictDetector: bắt thêm mâu thuẫn NGỮ NGHĨA (không số) trên
+    các cặp cùng chủ đề. None = chỉ dò mâu thuẫn số (tất định)."""
     # gom chunk áp-dụng-được theo từng VB
     per_doc: list[tuple[str, list]] = []
     for uri in scope_frbr_uris:
@@ -82,6 +99,7 @@ def detect_conflicts(
         per_doc.append((uri, chunks))
 
     cands: list[ConflictCandidate] = []
+    topical_pairs: list[tuple[str, str, str, str]] = []
     # mâu thuẫn SỐ: cặp xuyên văn bản, cùng chủ đề, lệch đại lượng cùng đơn vị
     for i in range(len(per_doc)):
         for j in range(i + 1, len(per_doc)):
@@ -90,6 +108,7 @@ def detect_conflicts(
                 for cb in per_doc[j][1]:
                     if len(ta & _topic_tokens(cb.span_text)) < min_topic_overlap:
                         continue
+                    topical_pairs.append((ca.unit_eid, ca.span_text, cb.unit_eid, cb.span_text))
                     qb = _quantities(cb.span_text)
                     diverge = [u for u in qa.keys() & qb.keys() if qa[u] != qb[u]]
                     if diverge:
@@ -98,6 +117,8 @@ def detect_conflicts(
                             ca.unit_eid, cb.unit_eid, "numeric_divergence",
                             f"{u}: {sorted(qa[u])} vs {sorted(qb[u])}"))
 
+    if semantic is not None:
+        cands.extend(semantic.detect(topical_pairs))   # mâu thuẫn ngữ-nghĩa (model)
     cands.extend(_explicit_conflicts(session, scope_frbr_uris))
     return cands
 
@@ -125,15 +146,16 @@ def _explicit_conflicts(session: Session, scope_frbr_uris: list[str]) -> list[Co
 def find_and_resolve_conflicts(
     session: Session, scope_frbr_uris: list[str], as_of: dt.date, *,
     min_topic_overlap: int = 2, question_type: str = "general", lang: str = "vi",
-    pack=None,
+    pack=None, semantic: SemanticConflictDetector | None = None,
 ) -> list[ConflictFinding]:
     """Phát hiện → giải (lex superior/posterior/abstain). KHÔNG auto khi mơ hồ (#6).
 
-    pack = JurisdictionPack (W6) → bơm thang bậc theo vùng tài phán; None = VN mặc định."""
+    pack = JurisdictionPack (W6) → bơm thang bậc theo vùng tài phán; None = VN mặc định.
+    semantic = SemanticConflictDetector → bắt thêm mâu thuẫn ngữ-nghĩa."""
     rank_fn = pack.rank_of if pack is not None else None
     findings = []
     for c in detect_conflicts(session, scope_frbr_uris, as_of,
-                              min_topic_overlap=min_topic_overlap, lang=lang):
+                              min_topic_overlap=min_topic_overlap, lang=lang, semantic=semantic):
         res = repo.resolve_conflict(session, [c.eid_a, c.eid_b], as_of,
                                     question_type, rank_fn=rank_fn)
         findings.append(ConflictFinding(c, res))
