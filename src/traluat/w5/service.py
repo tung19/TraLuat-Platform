@@ -22,6 +22,7 @@ from ..w4 import Adjudication, CaseInput, ReasoningEngine
 from ..w4.auditor import ElementJudge
 from .audit import AuditLog
 from .egress import PUBLIC_KB, EgressPolicy, LLMDestination, RouteDecision
+from .tracing import span
 from .tenancy import TenantContext
 
 
@@ -107,7 +108,9 @@ class LegalService:
         engine = ReasoningEngine(
             self.s, gateway=gateway, nli=self.nli,
             element_judge=self.element_judge, elements_by_eid=self.elements_by_eid)
-        adj = engine.analyze(case, as_of, tenant_id=ctx.tenant_id, lang=lang)
+        with span("service.analyze", trace_id=trace_id,
+                  **{"traluat.destination": decision.destination.value}):
+            adj = engine.analyze(case, as_of, tenant_id=ctx.tenant_id, lang=lang)
         self.audit.confirm(intent, "done")
         return ServiceResponse(True, trace_id, decision, adjudication=adj)
 

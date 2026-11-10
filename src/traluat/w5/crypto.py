@@ -35,6 +35,66 @@ class SoftwareKMS:
         return self._f.decrypt(wrapped)
 
 
+class RemoteKMSProvider:
+    """KMS cắm-ngoài (HSM/cloud) qua 2 callable `wrap_fn/unwrap_fn` — không kéo SDK vào
+    lõi. Dùng để bọc AWS KMS / Vault Transit / HSM tự quản mà vẫn giữ `KMSProvider` port.
+    Test: truyền hàm khả-nghịch (mock) để kiểm roundtrip."""
+    def __init__(self, wrap_fn, unwrap_fn) -> None:
+        self._wrap = wrap_fn
+        self._unwrap = unwrap_fn
+
+    def wrap(self, dek: bytes) -> bytes:
+        return self._wrap(dek)
+
+    def unwrap(self, wrapped: bytes) -> bytes:
+        return self._unwrap(wrapped)
+
+
+class AwsKmsProvider:
+    """AWS KMS — DEK được KMS encrypt (envelope). `client` = boto3 kms client (lazy;
+    nêu rõ nếu thiếu boto3). `key_id` = CMK/HSM-backed key (CloudHSM key store)."""
+    def __init__(self, key_id: str, *, client=None) -> None:
+        if client is None:
+            try:
+                import boto3
+            except ImportError as e:  # pragma: no cover
+                raise RuntimeError("AwsKmsProvider cần `boto3` (cài extra kms)") from e
+            client = boto3.client("kms")
+        self._c = client
+        self._key_id = key_id
+
+    def wrap(self, dek: bytes) -> bytes:
+        return self._c.encrypt(KeyId=self._key_id, Plaintext=dek)["CiphertextBlob"]
+
+    def unwrap(self, wrapped: bytes) -> bytes:
+        return self._c.decrypt(CiphertextBlob=wrapped)["Plaintext"]
+
+
+class VaultTransitProvider:
+    """HashiCorp Vault Transit — wrap/unwrap DEK không rời Vault. `client` = hvac client
+    (lazy). `key_name` = khoá transit (có thể HSM-backed qua Vault Enterprise seal)."""
+    def __init__(self, key_name: str, *, client=None) -> None:
+        import base64
+        self._b64 = base64
+        if client is None:
+            try:
+                import hvac
+            except ImportError as e:  # pragma: no cover
+                raise RuntimeError("VaultTransitProvider cần `hvac` (cài extra kms)") from e
+            client = hvac.Client()
+        self._c = client
+        self._key = key_name
+
+    def wrap(self, dek: bytes) -> bytes:
+        r = self._c.secrets.transit.encrypt_data(
+            name=self._key, plaintext=self._b64.b64encode(dek).decode())
+        return r["data"]["ciphertext"].encode()          # "vault:v1:..."
+
+    def unwrap(self, wrapped: bytes) -> bytes:
+        r = self._c.secrets.transit.decrypt_data(name=self._key, ciphertext=wrapped.decode())
+        return self._b64.b64decode(r["data"]["plaintext"])
+
+
 class TenantCrypto:
     """Quản DEK-per-tenant + mã/giải nội dung khách. `vault` lưu wrapped-DEK
     (prod: tenant.kms_key_id / Vault; mặc định in-memory)."""

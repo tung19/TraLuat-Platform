@@ -13,7 +13,15 @@ from .tasks import CeleryTaskQueue, InMemoryTaskQueue, TaskQueue, TaskRunner
 from .service import LegalService, ServiceResponse
 from .auth import decode_context
 from .rls import rls_ddl, set_tenant
-from .crypto import CryptoShredded, KMSProvider, SoftwareKMS, TenantCrypto
+from .crypto import (
+    AwsKmsProvider,
+    CryptoShredded,
+    KMSProvider,
+    RemoteKMSProvider,
+    SoftwareKMS,
+    TenantCrypto,
+    VaultTransitProvider,
+)
 
 __all__ = [
     "TenantContext", "MissingTenant", "ResidencyViolation", "require_role",
@@ -24,4 +32,5 @@ __all__ = [
     "LegalService", "ServiceResponse",
     "decode_context", "rls_ddl", "set_tenant",
     "TenantCrypto", "SoftwareKMS", "KMSProvider", "CryptoShredded",
+    "RemoteKMSProvider", "AwsKmsProvider", "VaultTransitProvider",
 ]

@@ -38,11 +38,11 @@
 - **Test:** `/review` 200 + render findings · `/doc` trả văn bản@T · `/review-queue` list+approve.
 - **🔌 Cần-ngoài (tuỳ chọn):** nâng lên React/Next nếu cần UX sâu (hiện single-file HTML/JS đủ demo).
 
-## WP5 — Observability đầy đủ (OTel) + Security (HSM)
-- **T5.1 OTel tracing** (`w5/tracing.py`): OpenTelemetry SDK + span trên API/service/gateway + OTLP exporter (env) + propagate `trace_id`. Compose: otel-collector (profile obs).
-- **T5.2 HSM provider**: `KMSProvider` **đã là port** → thêm `CloudKMS`/`HSMProvider` impl (AWS KMS/Vault Transit). `SoftwareKMS` giữ cho dev.
-- **Test:** span tạo ra (in-memory exporter) · HSM provider wrap/unwrap (mock) roundtrip.
-- **🔌 Cần-ngoài:** OTel collector/Jaeger chạy · HSM/KMS thật (Vault/AWS).
+## WP5 — Observability đầy đủ (OTel) + Security (HSM) ✅ XONG
+- **T5.1 OTel tracing** ✅ (`w5/tracing.py`): OTel **optional** (extra `obs`) — `setup_tracing()` TracerProvider + OTLP exporter khi có env `OTEL_EXPORTER_OTLP_ENDPOINT`; `span(name, trace_id, **attrs)` context-manager (no-op nếu SDK chưa cài). Nối `trace_id` W5 làm attribute. Đã cắm `span("service.analyze")` ở biên service.
+- **T5.2 HSM/cloud KMS** ✅ (`w5/crypto.py`): thêm `RemoteKMSProvider` (callable wrap/unwrap — cắm HSM/cloud không kéo SDK vào lõi) + `AwsKmsProvider` (boto3 lazy) + `VaultTransitProvider` (hvac lazy). Cùng port `KMSProvider` với `SoftwareKMS` (dev).
+- **Test** ✅: `test_w5_observability_kms.py` — span ghi được (InMemorySpanExporter) + attrs · span no-op an toàn · RemoteKMS roundtrip · thay SoftwareKMS↔RemoteKMS không đụng TenantCrypto + crypto-shred.
+- **🔌 Cần-ngoài:** OTel collector/Jaeger chạy (chỉ cần set env) · HSM/KMS thật (Vault/AWS) + `boto3`/`hvac`.
 
 ## WP6 — OCR full-page (detector + recognizer)
 **Mục tiêu:** ảnh trang luật đầy đủ → text (hiện mới recognizer dòng).

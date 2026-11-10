@@ -30,6 +30,10 @@ models = [
 graph = [
     "neo4j>=5",
 ]
+obs = [
+    "opentelemetry-sdk>=1.27",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.27",
+]
 
 [dependency-groups]
 dev = [
