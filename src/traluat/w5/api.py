@@ -197,6 +197,12 @@ pre{background:#f8fafc;padding:.6rem;border-radius:.4rem;white-space:pre-wrap;fo
 <input id="la" type="date" value="2022-01-01"><button onclick="lookup()">Hỏi</button></div>
 <div id="lout"></div></section>
 
+<section><h2>⚡Thời hiệu / thời hạn tố tụng (FR-35.13)</h2>
+<div class=row>loại <input id="wk" size="22" value="khang_cao_so_tham_ds">
+mốc bắt đầu <input id="ws" type="date" value="2022-03-04">
+as_of <input id="wa" type="date" value="2022-06-01"><button onclick="deadline()">Tính</button></div>
+<div id="wout"></div></section>
+
 <section><h2>So sánh văn bản 2 ngày (FR-36)</h2>
 <div class=row>frbr <input id="cf" size="22" value="trl:vn/nd/99/2020">
 T1 <input id="c1" type="date" value="2021-06-01"> T2 <input id="c2" type="date" value="2022-06-01">
@@ -220,6 +226,13 @@ async function lookup(){const o=document.getElementById('lout');o.innerHTML='...
   o.innerHTML=d.abstain?('<p class=ab>⛔ abstain: '+esc(d.reason)+'</p>')
     :('<pre>'+esc(d.text)+'</pre><p>'+cites(d.citations)+'</p>')
     +'<small>🤖 AI · route='+esc(d.route.destination)+' · trace='+esc(d.trace_id)+'</small>';}
+async function deadline(){const o=document.getElementById('wout');o.innerHTML='...';
+  const q=new URLSearchParams({kind:wk.value,start:ws.value,as_of:wa.value});
+  const r=await fetch('/deadline?'+q,{headers:hdr()});const d=await r.json();
+  if(r.status!=200){o.innerHTML='<p class=ab>Lỗi '+r.status+': '+esc(JSON.stringify(d))+'</p>';return;}
+  o.innerHTML='<p><b>Hết hạn: '+esc(d.deadline)+'</b> ('+d.value+' '+d.unit+')'
+    +(d.rolled_from?(' · đã lùi từ '+esc(d.rolled_from)+' do ngày nghỉ'):'')+'<br>'
+    +'<small>căn cứ '+cites([d.source_eid])+' · @'+esc(d.as_of)+'</small></p>';}
 async function compare(){const o=document.getElementById('cout');o.innerHTML='...';
   const q=new URLSearchParams({frbr:cf.value,a:c1.value,b:c2.value});
   const r=await fetch('/compare?'+q,{headers:hdr()});const d=await r.json();
@@ -537,6 +550,22 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         return {"abstain": d.abstain, "reason": d.reason, "text": d.text,
                 "template_id": d.template_id, "citations": d.citations,
                 "ai_label": d.ai_label, "route": "local"}
+
+    @app.get("/deadline")
+    def deadline(kind: str, start: str, as_of: str | None = None,
+                 ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
+        # FR-35.13 — thời hiệu/thời hạn tố tụng@as_of (neo điều luật, lùi ngày nghỉ).
+        need(ctx, "viewer", "lawyer", "reviewer", "owner")
+        from ..w1.deadlines import compute_deadline
+        a = dt.date.fromisoformat(as_of) if as_of else dt.date.today()
+        try:
+            r = compute_deadline(svc.s, kind, dt.date.fromisoformat(start), a)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+        return {"kind": r.kind, "moc_bat_dau": r.moc_bat_dau.isoformat(),
+                "deadline": r.deadline.isoformat(), "value": r.value, "unit": r.unit,
+                "source_eid": r.source_eid, "as_of": a.isoformat(),
+                "rolled_from": r.rolled_from.isoformat() if r.rolled_from else None}
 
     @app.get("/compare")
     def compare(frbr: str, a: str, b: str, lang: str = "vi",

@@ -180,8 +180,31 @@ def _viewer():
 def test_tools_page(client):
     r = client.get("/tools")
     assert r.status_code == 200
-    for frag in ("/lookup", "/compare", "/draft"):    # 3 form gọi đúng endpoint
+    for frag in ("/lookup", "/compare", "/draft", "/deadline"):   # 4 form gọi đúng endpoint
         assert frag in r.text
+
+
+def test_deadline_endpoint(client):
+    import datetime as _dt
+
+    from traluat.w1.reference import RefRow, upsert_reference
+    from traluat.w5.api import get_service
+    svc = next(client.app.dependency_overrides[get_service]())
+    upsert_reference(svc.s, "thoi_hieu", [
+        RefRow("khang_cao_so_tham_ds", {"value": 15, "unit": "day"},
+               _dt.date(2016, 7, 1), None, "bltts2015__dieu_273")], pii_check=False)
+    r = client.get("/deadline?kind=khang_cao_so_tham_ds&start=2022-03-04&as_of=2022-06-01",
+                   headers=_viewer())
+    assert r.status_code == 200
+    d = r.json()
+    assert d["deadline"] == "2022-03-21"              # +15 lùi T7→T2
+    assert d["rolled_from"] == "2022-03-19" and d["source_eid"] == "bltts2015__dieu_273"
+
+
+def test_deadline_no_data_404(client):
+    r = client.get("/deadline?kind=khong-co&start=2022-01-01&as_of=2022-01-01",
+                   headers=_viewer())
+    assert r.status_code == 404
 
 
 def test_lookup_endpoint(client):

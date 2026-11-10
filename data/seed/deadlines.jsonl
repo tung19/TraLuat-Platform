@@ -1,0 +1,7 @@
+{"kind":"khang_cao_so_tham_ds","value":15,"unit":"day","valid_from":"2016-07-01","source_eid":"bltts2015__dieu_273","note":"Kháng cáo bản án sơ thẩm dân sự"}
+{"kind":"khang_cao_so_tham_hs","value":15,"unit":"day","valid_from":"2018-01-01","source_eid":"bltths2015__dieu_333","note":"Kháng cáo bản án sơ thẩm hình sự"}
+{"kind":"khoi_kien_hop_dong","value":3,"unit":"year","valid_from":"2017-01-01","source_eid":"blds2015__dieu_429","note":"Thời hiệu khởi kiện tranh chấp hợp đồng"}
+{"kind":"khoi_kien_boi_thuong","value":3,"unit":"year","valid_from":"2017-01-01","source_eid":"blds2015__dieu_588","note":"Thời hiệu yêu cầu bồi thường thiệt hại ngoài hợp đồng"}
+{"kind":"khieu_nai_lan_dau","value":90,"unit":"day","valid_from":"2012-07-01","source_eid":"luatkn2011__dieu_9","note":"Thời hiệu khiếu nại lần đầu"}
+{"kind":"khoi_kien_hanh_chinh","value":1,"unit":"year","valid_from":"2016-07-01","source_eid":"luattthc2015__dieu_116","note":"Thời hiệu khởi kiện quyết định hành chính"}
+{"kind":"yeu_cau_thi_hanh_an","value":5,"unit":"year","valid_from":"2009-07-01","source_eid":"luatthads2008__dieu_30","note":"Thời hiệu yêu cầu thi hành án dân sự"}
