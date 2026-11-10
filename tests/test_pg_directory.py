@@ -63,10 +63,13 @@ def test_nearby_radius_and_order(session: Session):
 
 
 def test_nearby_kind_filter(session: Session):
-    add_directory_entry(session, "toa_an", "Toà", lat=HCMC[0], lon=HCMC[1])
-    add_directory_entry(session, "cong_chung", "VPCC gần", lat=HCMC2[0], lon=HCMC2[1])
+    add_directory_entry(session, "toa_an", "Toà (test)", lat=HCMC[0], lon=HCMC[1])
+    add_directory_entry(session, "cong_chung", "VPCC gần (test)",
+                        lat=HCMC2[0], lon=HCMC2[1])
     hits = nearby(session, HCMC[0], HCMC[1], radius_m=50_000, kind="cong_chung")
-    assert [h.entry.kind for h in hits] == ["cong_chung"]
+    names = [h.entry.name for h in hits]
+    assert all(h.entry.kind == "cong_chung" for h in hits)     # lọc đúng loại
+    assert "VPCC gần (test)" in names and "Toà (test)" not in names
 
 
 def test_business_contact_allowed_but_cccd_quarantined(session: Session):

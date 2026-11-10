@@ -1,0 +1,13 @@
+{"kind":"toa_an","name":"Tòa án nhân dân thành phố Hà Nội","address":"43 Hai Bà Trưng, Hoàn Kiếm, Hà Nội","province":"Hà Nội","phone":"02439364321","lat":21.024500,"lon":105.852000}
+{"kind":"toa_an","name":"Tòa án nhân dân cấp cao tại Hà Nội","address":"Khu đô thị Cầu Giấy, Hà Nội","province":"Hà Nội","lat":21.030000,"lon":105.800000}
+{"kind":"toa_an","name":"Tòa án nhân dân thành phố Hồ Chí Minh","address":"131 Nam Kỳ Khởi Nghĩa, Quận 1, TP.HCM","province":"TP.HCM","phone":"02838293894","lat":10.779700,"lon":106.699000}
+{"kind":"toa_an","name":"Tòa án nhân dân cấp cao tại Thành phố Hồ Chí Minh","address":"124 Nam Kỳ Khởi Nghĩa, Quận 1, TP.HCM","province":"TP.HCM","lat":10.780500,"lon":106.699500}
+{"kind":"toa_an","name":"Tòa án nhân dân quận 1","address":"97 Nguyễn Thị Minh Khai, Quận 1, TP.HCM","province":"TP.HCM","lat":10.772500,"lon":106.692000}
+{"kind":"toa_an","name":"Tòa án nhân dân thành phố Đà Nẵng","address":"374 Núi Thành, Hải Châu, Đà Nẵng","province":"Đà Nẵng","lat":16.040000,"lon":108.223000}
+{"kind":"toa_an","name":"Tòa án nhân dân thành phố Hải Phòng","address":"Lê Hồng Phong, Ngô Quyền, Hải Phòng","province":"Hải Phòng","lat":20.844900,"lon":106.688100}
+{"kind":"toa_an","name":"Tòa án nhân dân thành phố Cần Thơ","address":"Trần Phú, Ninh Kiều, Cần Thơ","province":"Cần Thơ","lat":10.045200,"lon":105.746900}
+{"kind":"cong_chung","name":"Phòng công chứng số 1 thành phố Hồ Chí Minh","address":"97 Pasteur, Quận 1, TP.HCM","province":"TP.HCM","phone":"02838290400","lat":10.776400,"lon":106.699700}
+{"kind":"cong_chung","name":"Phòng công chứng số 2 thành phố Hồ Chí Minh","address":"94-96 Ngô Quyền, Quận 5, TP.HCM","province":"TP.HCM","lat":10.754800,"lon":106.667300}
+{"kind":"cong_chung","name":"Phòng công chứng số 1 thành phố Hà Nội","address":"310 Bà Triệu, Hai Bà Trưng, Hà Nội","province":"Hà Nội","lat":21.008900,"lon":105.849800}
+{"kind":"vien_ksnd","name":"Viện kiểm sát nhân dân thành phố Hồ Chí Minh","address":"310 Nguyễn Trãi, Quận 5, TP.HCM","province":"TP.HCM","lat":10.758900,"lon":106.676000}
+{"kind":"thi_hanh_an","name":"Cục Thi hành án dân sự Thành phố Hồ Chí Minh","address":"372A Nguyễn Văn Lượng, Gò Vấp, TP.HCM","province":"TP.HCM","lat":10.838000,"lon":106.667000}
