@@ -56,6 +56,7 @@ def answer_question(
     top_k: int = 8,
     extra_anchors: list[dt.date] | None = None,
     plan_caveat: bool = False,
+    node: str = "answer",            # "answer" | "summary" (FR-14) → model-tier router
 ) -> Answer:
     # B1: pin MỘT known_as_of (tx-time) cho cả request → retrieve và verify thấy
     # cùng một snapshot, không lệch nếu có tx-version commit giữa chừng.
@@ -76,7 +77,7 @@ def answer_question(
         return Answer.abstained("insufficient_retrieval", as_of)
 
     # 2) generate (LLM CHỈ từ ngữ cảnh; guard tenant + nhãn AI trong gateway)
-    draft = gateway.generate(query, cands, as_of=as_of, node="answer",
+    draft = gateway.generate(query, cands, as_of=as_of, node=node,
                              tenant_id=tenant_id, lang=lang)
     if not draft.citations:                       # R1 sufficiency floor
         return Answer.abstained("insufficient_retrieval", as_of)

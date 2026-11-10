@@ -133,3 +133,25 @@ class LegalService:
         self.audit.confirm(intent, "done")
         return ServiceResponse(not ans.abstain, trace_id, decision, answer=ans,
                                reason=ans.reason)
+
+    def summarize(
+        self, topic: str, as_of: dt.date, ctx: TenantContext, *,
+        local_available: bool | None = None, actor: str = "api",
+        trace_id: str | None = None, lang: str = "vi",
+    ) -> ServiceResponse:
+        """FR-14 — Tóm tắt quy định pháp luật về `topic`@as_of (KB công, grounded,
+        cite-or-abstain). node='summary' → model-tier router. Egress như lookup."""
+        trace_id = trace_id or uuid.uuid4().hex
+        decision, intent, gateway = self._route(
+            ctx, [PUBLIC_KB], "summarize", local_available, trace_id, actor)
+        if gateway is None:
+            self.audit.confirm(intent, "denied")
+            return ServiceResponse(False, trace_id, decision,
+                                   reason=f"egress_denied:{decision.reason}")
+        ans = answer_question(
+            self.s, f"Tóm tắt các quy định pháp luật về: {topic}", as_of=as_of,
+            gateway=gateway, nli=self.nli, tenant_id=ctx.tenant_id, lang=lang,
+            node="summary")
+        self.audit.confirm(intent, "done")
+        return ServiceResponse(not ans.abstain, trace_id, decision, answer=ans,
+                               reason=ans.reason)

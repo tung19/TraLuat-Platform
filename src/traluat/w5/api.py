@@ -85,6 +85,12 @@ class LookupRequest(BaseModel):        # FR-11 Q&A grounded (KB công)
     lang: str = "vi"
 
 
+class SummarizeRequest(BaseModel):     # FR-14 tóm tắt grounded (KB công)
+    topic: str
+    as_of: str
+    lang: str = "vi"
+
+
 class DraftRequest(BaseModel):         # FR-34/15 soạn đơn/HĐ (tình tiết khách → local)
     kind: str
     facts: str
@@ -213,6 +219,11 @@ pre{background:#f8fafc;padding:.6rem;border-radius:.4rem;white-space:pre-wrap;fo
 <input id="la" type="date" value="2022-01-01"><button onclick="lookup()">Hỏi</button></div>
 <div id="lout"></div></section>
 
+<section><h2>Tóm tắt quy định (FR-14)</h2>
+<div class=row><input id="sq" size="40" placeholder="chủ đề..." style="flex:1" value="điều kiện kinh doanh">
+<input id="sa2" type="date" value="2022-01-01"><button onclick="summarize()">Tóm tắt</button></div>
+<div id="sout"></div></section>
+
 <section><h2>⚡Thời hiệu / thời hạn tố tụng (FR-35.13)</h2>
 <div class=row>loại <input id="wk" size="22" value="khang_cao_so_tham_ds">
 mốc bắt đầu <input id="ws" type="date" value="2022-03-04">
@@ -242,6 +253,13 @@ async function lookup(){const o=document.getElementById('lout');o.innerHTML='...
   o.innerHTML=d.abstain?('<p class=ab>⛔ abstain: '+esc(d.reason)+'</p>')
     :('<pre>'+esc(d.text)+'</pre><p>'+cites(d.citations)+'</p>')
     +'<small>🤖 AI · route='+esc(d.route.destination)+' · trace='+esc(d.trace_id)+'</small>';}
+async function summarize(){const o=document.getElementById('sout');o.innerHTML='...';
+  const r=await fetch('/summarize',{method:'POST',headers:hdr(1),body:JSON.stringify(
+    {topic:sq.value,as_of:sa2.value})});const d=await r.json();
+  if(r.status!=200){o.innerHTML='<p class=ab>Lỗi '+r.status+'</p>';return;}
+  o.innerHTML=d.abstain?('<p class=ab>⛔ abstain: '+esc(d.reason)+'</p>')
+    :('<pre>'+esc(d.summary)+'</pre><p>'+cites(d.citations)+'</p>')
+    +'<small>🤖 AI · route='+esc(d.route.destination)+'</small>';}
 async function deadline(){const o=document.getElementById('wout');o.innerHTML='...';
   const q=new URLSearchParams({kind:wk.value,start:ws.value,as_of:wa.value});
   const r=await fetch('/deadline?'+q,{headers:hdr()});const d=await r.json();
@@ -559,6 +577,21 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
             "reason": resp.reason, "route": {"destination": resp.route.destination.value},
             "abstain": a.abstain if a else True,
             "text": (a.text if a and not a.abstain else ""),
+            "citations": (a.citations if a else []),
+        }
+
+    @app.post("/summarize")
+    def summarize(body: SummarizeRequest, ctx: TenantContext = Depends(auth),
+                  svc: LegalService = Depends(get_service)):
+        # FR-14 — tóm tắt quy định pháp luật (KB công, grounded cite-or-abstain).
+        need(ctx, "viewer", "lawyer", "reviewer", "owner")
+        resp = svc.summarize(body.topic, parse_date(body.as_of), ctx, lang=body.lang)
+        a = resp.answer
+        return {
+            "answered": resp.answered, "trace_id": resp.trace_id, "ai_label": resp.ai_label,
+            "reason": resp.reason, "route": {"destination": resp.route.destination.value},
+            "abstain": a.abstain if a else True,
+            "summary": (a.text if a and not a.abstain else ""),
             "citations": (a.citations if a else []),
         }
 

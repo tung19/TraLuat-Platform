@@ -180,7 +180,7 @@ def _viewer():
 def test_tools_page(client):
     r = client.get("/tools")
     assert r.status_code == 200
-    for frag in ("/lookup", "/compare", "/draft", "/deadline"):   # 4 form gọi đúng endpoint
+    for frag in ("/lookup", "/summarize", "/compare", "/draft", "/deadline"):   # form endpoints
         assert frag in r.text
 
 
@@ -231,6 +231,16 @@ def test_lookup_endpoint(client):
     assert r.status_code == 200
     d = r.json()
     assert "abstain" in d and d["ai_label"] and d["trace_id"]
+
+
+def test_summarize_endpoint(client):
+    r = client.post("/summarize", json={"topic": "điều kiện kinh doanh", "as_of": "2022-01-01"},
+                    headers=_viewer())                     # FR-14 KB công → viewer OK
+    assert r.status_code == 200
+    d = r.json()
+    assert "abstain" in d and "summary" in d and d["ai_label"] and d["trace_id"]
+    assert client.post("/summarize", json={"topic": "x", "as_of": "bad"},
+                       headers=_viewer()).status_code == 422   # ngày sai → 422
 
 
 def test_compare_endpoint(client):
