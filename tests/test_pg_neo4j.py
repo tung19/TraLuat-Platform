@@ -84,6 +84,26 @@ def test_neo4j_multihop_matches_cte(session: Session, driver):
            pg.multihop("nd99__dieu_5", ["cites"], as_of=D(2025, 6, 1))
 
 
+def test_auto_sync_on_materialize(session: Session, driver):
+    # option (a): materialize cạnh approved → hook tự sync sang Neo4j (không full-project)
+    from traluat.w2 import repo
+    from traluat.w2.graph_neo4j import enable_neo4j_sync
+    from traluat.w2.models import NormRelation
+
+    with driver.session() as s:
+        s.run("MATCH (n) DETACH DELETE n")          # dọn Neo4j để cô lập
+    repo.clear_post_materialize_hooks()
+    enable_neo4j_sync(driver)
+    try:
+        _edge(session, "nd99__dieu_1", "nd99__dieu_5", "guides")   # review_status=approved
+        rel = session.scalars(sa.select(NormRelation)).first()
+        assert repo.materialize(session, rel) is True              # hook → sync cạnh
+        assert Neo4jGraphStore(driver).multihop(
+            "nd99__dieu_1", ["guides"], as_of=D(2022, 1, 1)) == ["nd99__dieu_5"]
+    finally:
+        repo.clear_post_materialize_hooks()         # KHÔNG rò hook sang test khác
+
+
 def test_neo4j_neighborhood(session: Session, driver):
     _edge(session, "nd99__dieu_1", "nd99__dieu_5", "guides")
     project_to_neo4j(session, driver)

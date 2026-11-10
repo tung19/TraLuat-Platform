@@ -180,12 +180,26 @@ def _eid(s: Session, unit_id: int) -> str:
     return s.scalar(sa.select(Unit.eid).where(Unit.id == unit_id))
 
 
+# ── Post-materialize hooks (ADR-0001) — projection đồ thị sync sau khi áp. ──
+# repo KHÔNG import Neo4j; projector tự đăng ký hook (decoupled).
+_POST_MATERIALIZE_HOOKS: list = []
+
+
+def register_post_materialize(fn) -> None:
+    _POST_MATERIALIZE_HOOKS.append(fn)
+
+
+def clear_post_materialize_hooks() -> None:
+    _POST_MATERIALIZE_HOOKS.clear()
+
+
 def materialize(s: Session, rel: NormRelation, *, theta: float = 0.9) -> bool:
     """Áp một norm_relation vào kho bitemporal — CHỈ khi qua cổng.
 
     Cổng (C1): materialize khi `review_status='approved'`, HOẶC confidence≥θ cho
     loại AUTO-SAFE. repeals/replaces/amends **KHÔNG BAO GIỜ auto** (phải approved).
-    Trả True nếu đã materialize, False nếu bị chặn (chờ duyệt).
+    Trả True nếu đã materialize, False nếu bị chặn (chờ duyệt). Sau khi áp → gọi
+    post-materialize hooks (vd sync projection Neo4j) với cạnh vừa thay đổi.
     """
     approved = rel.review_status == "approved"
     auto_ok = rel.relation_type in AUTO_SAFE_TYPES and (rel.confidence or 0.0) >= theta
@@ -194,9 +208,10 @@ def materialize(s: Session, rel: NormRelation, *, theta: float = 0.9) -> bool:
 
     if rel.relation_type in {"repeals", "replaces"}:
         _materialize_repeal(s, rel)
-        return True
     # amends cần TEXT mới (W1 resolve từ văn bản sửa đổi) — ngoài phạm vi slice-3.
     # cites/guides/hierarchy/conflicts: quan hệ đồ thị, không chạm unit_version.
+    for hook in _POST_MATERIALIZE_HOOKS:        # sync projection (nếu đăng ký)
+        hook(s, rel)
     return True
 
 
