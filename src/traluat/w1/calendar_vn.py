@@ -79,6 +79,21 @@ def add_period(start: dt.date, value: int, unit: str) -> dt.date:
     raise ValueError(f"unit không hợp lệ: {unit} (day|month|year)")
 
 
+def vn_lunar_holidays(year: int) -> set[dt.date]:
+    """Ngày lễ ÂM tính từ thuật toán âm lịch (35.14) — KHÔNG cần reference:
+    Tết (30 Chạp → mùng 4, bao trọn 5 ngày nghỉ BLLĐ) + Giỗ Tổ 10/3 âm."""
+    from .lunar import gio_to_date, tet_date
+    tet = tet_date(year)
+    days = {tet + dt.timedelta(days=o) for o in range(-1, 5)}   # 30 Chạp..mùng 4
+    days.add(gio_to_date(year))
+    return days
+
+
+def vn_holidays(year: int) -> set[dt.date]:
+    """Toàn bộ ngày lễ VN năm `year` = dương cố định + âm (tính tự động)."""
+    return vn_fixed_solar_holidays(year) | vn_lunar_holidays(year)
+
+
 def holidays_from_reference(session, year: int, as_of: dt.date) -> set[dt.date]:
     """Ngày lễ ÂM-lịch-phái-sinh (Tết, Giỗ Tổ…) của `year` từ reference-data
     (dataset `ngay_nghi`, key=str(year), value={"dates": ["YYYY-MM-DD", ...]}).

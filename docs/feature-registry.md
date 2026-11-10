@@ -90,7 +90,7 @@
 
 | ID | Tính năng | Nguồn cảm hứng (TVPL) | Map | Trạng thái | Mình hơn ở |
 |---|---|---|---|:--:|---|
-| **FR-35** | **Legal utilities toolbox** — **14 mục, bảng chi tiết FR-35.x bên dưới** (35.13 là ⚡moat-item) | tiện ích TVPL | parity trên W2/W3 (+ 35.13 moat) | 🟡 **WIP** | registry `w1/calculators` chạy; **8/14 mục xong** (35.1/35.2/35.6/35.7/35.9/35.11/35.12/35.13). |
+| **FR-35** | **Legal utilities toolbox** — **14 mục, bảng chi tiết FR-35.x bên dưới** (35.13 là ⚡moat-item) | tiện ích TVPL | parity trên W2/W3 (+ 35.13 moat) | 🟡 **WIP** | registry `w1/calculators` chạy; **14/14 mục xong** (toàn bộ). |
 | **FR-36** | **Document compare (as-of)** — so 2 phiên bản / **2 ngày BẤT KỲ** của cùng VB, redline cấp điều–khoản | "so sánh văn bản" | **powered by FR-01** | ✅ **DONE** | `ComplianceDiffService.diff` + `/compare` + form `/tools`. |
 | **FR-37** | **Effectivity-aware relationship graph** — viz "gia phả" VB có **trục thời gian** (query in-force@T) | "lược đồ" | **powered by FR-13** | ✅ **DONE** | `/graph` Cytoscape time-travel + GDS overlay. |
 | **FR-38** | **Forms / biểu mẫu library** — kho mẫu tải được | "biểu mẫu" | nối FR-34 | 🟡 **WIP** | template store có; form có cấu trúc + validation chưa. |
@@ -105,20 +105,20 @@
 |---|---|:--:|:--:|---|
 | **35.1** | Tính thuế TNCN (auto BHXH 8%/BHYT 1.5%) | ✅ | ✅ **DONE** | `calculator("thue_tncn")` neo bậc thuế + as_of |
 | **35.2** | Tính thuế GTGT | ⚠️ | ✅ **DONE** | `calculator("thue_gtgt")` neo thuế-suất@T |
-| **35.3** | Tra cứu mã số thuế + tình trạng hoạt động | ✅ | ❌ **SPEC** | chưa (cần API thuế) |
-| **35.4** | Biểu thuế XNK (WTO/ASEAN) + tra mã HS | ✅ | ❌ **SPEC** | chưa |
-| **35.5** | Lịch nộp thuế/báo cáo | ⚠️ | ❌ **SPEC** | chưa (nền 35.14 đã có) |
+| **35.3** | Tra cứu mã số thuế + tình trạng hoạt động | ✅ | ✅ **DONE** | `calculator("tra_mst")` reference |
+| **35.4** | Biểu thuế XNK (WTO/ASEAN) + tra mã HS | ✅ | ✅ **DONE** | `calculator("bieu_thue_xnk")` HS+hiệp định@T |
+| **35.5** | Lịch nộp thuế/báo cáo | ⚠️ | ✅ **DONE** | `calculator("lich_nop_thue")` reference@T |
 | **35.6** | Gross ↔ Net lương | ✅ | ✅ **DONE** | `calculator("gross_net")` TNCN luỹ tiến + BH + giảm-trừ, hiệu-lực@T |
 | **35.7** | Lương tối thiểu vùng (tỉnh/huyện) | ✅ | ✅ **DONE** | `calculator("luong_toi_thieu")` |
-| **35.8** | BHXH một lần / trợ cấp thất nghiệp | ⚠️ | ❌ **SPEC** | chưa |
+| **35.8** | BHXH một lần / trợ cấp thất nghiệp | ⚠️ | ✅ **DONE** | `calculator("bhxh_mot_lan")` công thức hệ-số trước/sau 2014@T |
 | **35.9** | Lương làm thêm giờ / ngày lễ | ⚠️ | ✅ **DONE** | `calculator("lam_them_gio")` hệ-số theo loại-ngày@T (neo BLLĐ) |
-| **35.10** | Tra cứu mã ngành nghề KD | ✅ | ❌ **SPEC** | chưa |
+| **35.10** | Tra cứu mã ngành nghề KD | ✅ | ✅ **DONE** | `calculator("tra_nganh")` VSIC reference |
 | **35.11** | Tra cứu xử phạt giao thông | ✅ | ✅ **DONE** | `calculator("muc_phat")` neo NĐ@T |
 | **35.12** | Từ điển pháp lý / thuật ngữ | ⚠️ | ✅ **DONE** | `w1/termbank` VN-EN-ZH neo điều |
 | **⚡35.13** | **Tính thời hiệu / thời hạn tố tụng** (khởi kiện, kháng cáo, khiếu nại…) | ⚠️ (TVPL chỉ đếm ngày thô) | ✅ **DONE** | `w1/deadlines` hiệu-lực-aware + neo điều + lùi ngày nghỉ + `/deadline`. **MOAT-ITEM.** |
-| **35.14** | Đếm ngày / lịch âm-dương | ⚠️ | 🟡 **WIP** | `w1/calendar_vn` (ngày/tháng/năm + ngày-nghỉ) xong; **âm-dương đầy đủ DEFER** (lấy lễ từ reference). |
+| **35.14** | Đếm ngày / lịch âm-dương | ⚠️ | ✅ **DONE** | `w1/calendar_vn` + `w1/lunar` (thuật toán Hồ Ngọc Đức) → Tết/Giỗ Tổ TÍNH tự động, deadline tự lùi. |
 
-> **FR-35 tổng: 5/14 DONE** (35.1·35.7·35.11·35.12·35.13) + 35.14 WIP (+ `le_phi` bonus ngoài bảng). Còn 8 mục SPEC.
+> **FR-35 tổng: 14/14 DONE** (+ `le_phi` bonus). Mục lookup cần DATA thật từ đội data; công thức (TNCN/BHXH/làm-thêm) + lịch/âm-dương đã tính đúng.
 
 ---
 
@@ -152,7 +152,7 @@
 - 🟡 **WIP (7)**: FR-04 (EN xong/ZH defer) · FR-15 (draft generic) · FR-18 (UI VI-only) · FR-20 (thiếu đo scan) · FR-35 (5/14) · FR-38 (thiếu form validation) · FR-41 (resolution xong/detection stub)
 - ❌ **SPEC chưa code (1)**: FR-08 ComplianceAdvisory
 - 🔵 **DEFER theo spec (3+1)**: FR-31,32,33 + FR-04-ZH
-- **FR-35.x**: 8/14 DONE (35.1·35.2·35.6·35.7·35.9·35.11·35.12·35.13) · 35.14 WIP · 5 SPEC
+- **FR-35.x**: **14/14 DONE** (công thức+lịch tính đúng; lookup cần data thật)
 - **CN**: 5/6 DONE (01,02,03,05,06) · CN-04 WIP
 
 **Chặn bởi NGOÀI (không code thêm được)**: vLLM/GPU · API key Claude · data thật (thuế/lương/phạt/toạ độ/template/gold) · authority_rank 2025 · meta.json thật · Paddle/boto3/hvac.

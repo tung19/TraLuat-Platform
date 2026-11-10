@@ -53,10 +53,11 @@ def compute_deadline(
     rolled_from = None
     deadline = raw
     if roll_rest_day:
-        # F5: hạn rơi cuối năm rồi lùi → có thể sang năm sau → lấy lễ CẢ raw.year lẫn
-        # raw.year+1 (vd lùi qua 31/12 vào cụm Tết âm đầu tháng 1-2 năm kế).
-        holidays = (cal.holidays_from_reference(session, raw.year, as_of)
-                    | cal.holidays_from_reference(session, raw.year + 1, as_of))
+        # Lễ âm (Tết/Giỗ Tổ) TÍNH TỰ ĐỘNG (35.14) + override từ reference nếu có.
+        # F5: hạn rơi cuối năm rồi lùi → union CẢ raw.year lẫn raw.year+1.
+        holidays = set()
+        for y in (raw.year, raw.year + 1):
+            holidays |= cal.vn_lunar_holidays(y) | cal.holidays_from_reference(session, y, as_of)
         if cal.is_rest_day(raw, holidays):
             deadline = cal.next_business_day(raw, holidays)
             rolled_from = raw

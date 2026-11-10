@@ -116,6 +116,19 @@ def test_rollover_across_year_boundary_uses_next_year_holidays(session: Session)
     assert r.deadline == D(2024, 1, 3)             # lùi qua lễ năm 2024 (union năm kế)
 
 
+def test_deadline_auto_rolls_over_tet_without_reference(session: Session):
+    # 35.14: lễ Tết TÍNH TỰ ĐỘNG (không cần seed ngay_nghi) → hạn rơi Tết tự lùi.
+    from traluat.w1.reference import RefRow as RR
+    upsert_reference(session, "thoi_hieu", [
+        RR("khieu_nai_lan_dau", {"value": 1, "unit": "day"},
+           D(2012, 7, 1), None, "luatkn__dieu_9")], pii_check=False)
+    # mốc 2022-01-30 (CN) +1 = 2022-01-31 (30 Chạp, lễ âm) → lùi qua cụm Tết
+    # (31/1..4/2) + cuối tuần 5-6/2 → 2022-02-07 (T2). KHÔNG seed lễ nào.
+    r = compute_deadline(session, "khieu_nai_lan_dau", D(2022, 1, 30), D(2022, 6, 1))
+    assert r.rolled_from == D(2022, 1, 31)
+    assert r.deadline == D(2022, 2, 7)
+
+
 def test_no_data_raises(session: Session):
     with pytest.raises(LookupError):
         compute_deadline(session, "khong_co", D(2022, 1, 1), D(2022, 1, 1))
