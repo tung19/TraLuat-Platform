@@ -21,10 +21,12 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
+import sqlalchemy as sa
+
 from ..w2 import repo
 from ..w2.bitemporal import EffectStatus
 from ..w2.models import Unit
-import sqlalchemy as sa
+from .ports import NLIVerifier
 
 _APPLICABLE = {EffectStatus.IN_FORCE, EffectStatus.TRANSITIONAL_APPLIES}
 
@@ -53,16 +55,19 @@ class GateResult:
     status: EffectStatus
     source_text: str | None
     missing_facts: set[str] = field(default_factory=set)
+    gate3_nli: str | None = None       # 'promote'|'hold'|None (defer; HOLD KHÔNG veto)
 
     @property
     def passed(self) -> bool:
+        # gate3 (NLI) chỉ PROMOTE/HOLD — KHÔNG veto → không nằm trong điều kiện pass.
         return self.gate1_exists and self.gate2_effective and self.gate3b_exact
 
 
 def verify_citation(
     session: Session, claim: str, unit_eid: str, anchor: dt.date, lang: str = "vi",
+    nli: NLIVerifier | None = None,
 ) -> GateResult:
-    """Verify 1 trích dẫn qua 3 cổng tất định."""
+    """Verify 1 trích dẫn qua 3 cổng tất định (+ gate3 NLI tuỳ chọn, không veto)."""
     exists = session.scalar(sa.select(Unit.id).where(Unit.eid == unit_eid)) is not None
     if not exists:
         return GateResult(unit_eid, False, False, False, EffectStatus.ABSENT, None)
@@ -72,7 +77,8 @@ def verify_citation(
 
     missing = _facts(claim) - _facts(text or "")
     gate3b = not missing  # mọi số/ngày trong claim có trong nguồn
-    return GateResult(unit_eid, True, gate2, gate3b, status, text, missing)
+    nli_verdict = nli.supports(claim, text) if (nli and text) else None
+    return GateResult(unit_eid, True, gate2, gate3b, status, text, missing, nli_verdict)
 
 
 @dataclass
@@ -85,6 +91,7 @@ class GroundingResult:
 
 def ground(
     session: Session, claim: str, anchor: dt.date, citations: list[str], lang: str = "vi",
+    nli: NLIVerifier | None = None,
 ) -> GroundingResult:
     """Kiểm 1 khẳng định + danh sách trích dẫn → giữ hay ABSTAIN.
 
@@ -94,7 +101,7 @@ def ground(
     if not citations:
         return GroundingResult(True, "insufficient_retrieval")
 
-    gates = [verify_citation(session, claim, eid, anchor, lang) for eid in citations]
+    gates = [verify_citation(session, claim, eid, anchor, lang, nli) for eid in citations]
     supported = [g.unit_eid for g in gates if g.passed]
     if not supported:
         return GroundingResult(True, "no_supported_citation", gates=gates)

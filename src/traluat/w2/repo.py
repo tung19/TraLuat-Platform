@@ -288,6 +288,27 @@ def citable_text(
     return (row[0] if row else None), status
 
 
+_DESTRUCTIVE = ("repeals", "replaces", "amends")
+
+
+def pending_destructive_relation(s: Session, eid: str) -> bool:
+    """R3: unit (hoặc văn bản chứa nó) đang là ĐÍCH của quan hệ repeals/replaces/
+    amends CHƯA DUYỆT (needs_review) → điều có thể đã chết mà queue chưa áp. Caller
+    hạ caveat. Tránh trả lời chắc nịch trên điều sắp bị thay đổi."""
+    uid = s.scalar(sa.select(Unit.id).where(Unit.eid == eid))
+    if uid is None:
+        return False
+    doc_id = s.scalar(sa.select(Unit.document_id).where(Unit.id == uid))
+    n = s.scalar(
+        sa.select(sa.func.count()).select_from(NormRelation).where(
+            NormRelation.relation_type.in_(_DESTRUCTIVE),
+            NormRelation.review_status == "needs_review",
+            sa.or_(NormRelation.dst_unit_id == uid, NormRelation.dst_doc_id == doc_id),
+        )
+    )
+    return bool(n)
+
+
 # ── R5: correct_valid_from (tx-time — giữ 'điều hệ thống từng tin') ───────────────
 def correct_valid_from(
     s: Session, version_id: int, correct_valid_from: dt.date,
