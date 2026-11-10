@@ -8,13 +8,40 @@ JudgmentAnalysisService (H6 second-opinion, chỉ chiều ràng-buộc-được,
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
+import unicodedata
+from dataclasses import dataclass, field
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from ..w2 import repo
 from ..w2.models import Document, Unit
+
+
+@dataclass
+class RequiredClauseRule:
+    name: str
+    any_of: list[str]        # điều khoản coi là CÓ nếu thấy ≥1 từ khoá
+
+
+@dataclass
+class ReviewFinding:
+    rule: str
+    status: str              # present | missing
+    evidence: str = ""
+
+
+class ReviewService:
+    """Rà soát văn bản theo RequiredClauseRule — bắt điều khoản BỎ SÓT (moat #2
+    omission). Deterministic keyword (playbook do chuyên gia định; nâng bằng ML sau)."""
+
+    def review(self, text: str, rules: list[RequiredClauseRule]) -> list[ReviewFinding]:
+        low = unicodedata.normalize("NFC", text).lower()
+        out = []
+        for r in rules:
+            hit = next((k for k in r.any_of if k.lower() in low), None)
+            out.append(ReviewFinding(r.name, "present" if hit else "missing", hit or ""))
+        return out
 
 
 @dataclass

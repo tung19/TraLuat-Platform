@@ -76,6 +76,12 @@ def test_health(client):
     assert client.get("/health").json() == {"status": "ok"}
 
 
+def test_index_and_metrics(client):
+    idx = client.get("/")
+    assert idx.status_code == 200 and "TraLuat" in idx.text   # W7 UI tối thiểu
+    assert client.get("/metrics").status_code == 200           # observability scrape
+
+
 def test_analyze_lawyer_ok(client):
     r = client.post("/analyze", json=BODY,
                     headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='lawyer')}"})

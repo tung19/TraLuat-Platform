@@ -9,10 +9,12 @@ from .jurisdiction import (
     JurisdictionPack, VN_PACK, get_pack, load_pack, register_pack,
 )
 from .workflows import (
-    ComplianceDiffService, JudgmentAnalysisService, JudgmentFinding, UnitDiff,
+    ComplianceDiffService, JudgmentAnalysisService, JudgmentFinding,
+    RequiredClauseRule, ReviewFinding, ReviewService, UnitDiff,
 )
 
 __all__ = [
     "JurisdictionPack", "VN_PACK", "get_pack", "load_pack", "register_pack",
     "ComplianceDiffService", "JudgmentAnalysisService", "UnitDiff", "JudgmentFinding",
+    "ReviewService", "RequiredClauseRule", "ReviewFinding",
 ]

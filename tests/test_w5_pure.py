@@ -47,6 +47,14 @@ def test_public_falls_back_local_when_claude_unavailable():
     assert d.destination == LLMDestination.LOCAL
 
 
+def test_metrics_counter():
+    from traluat.w5.metrics import Metrics
+    m = Metrics()
+    m.inc("req", tenant="a"); m.inc("req", tenant="a"); m.inc("req", tenant="b")
+    assert m.value("req", tenant="a") == 2 and m.value("req", tenant="b") == 1
+    assert 'req{tenant="a"} 2' in m.render()
+
+
 def test_audit_write_ahead_append_only():
     log = AuditLog()
     intent = log.record_intent(

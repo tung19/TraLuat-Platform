@@ -14,12 +14,30 @@ import datetime as dt
 
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel
 
 from ..w4 import CaseInput
 from .auth import decode_context
+from .metrics import Metrics
 from .service import LegalService
 from .tenancy import MissingTenant, TenantContext, require_role
+
+_INDEX_HTML = """<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<title>TraLuat</title></head><body style="font-family:sans-serif;max-width:720px;margin:2rem auto">
+<h1>TraLuat — trợ lý pháp lý</h1>
+<p>Nhập tình tiết + ngày sự kiện. Kết quả có <b>trích dẫn điều–khoản tại ngày T</b>,
+hoặc <b>abstain</b> khi không đủ căn cứ. Mọi output gắn nhãn AI.</p>
+<form id="f"><textarea id="facts" rows="4" style="width:100%" placeholder="tình tiết..."></textarea>
+<input id="asof" value="2022-01-01"> <button>Phân tích</button></form>
+<pre id="out"></pre>
+<script>
+f.onsubmit=async e=>{e.preventDefault();out.textContent='...';
+ const r=await fetch('/analyze',{method:'POST',headers:{'Content-Type':'application/json',
+  'Authorization':'Bearer '+(localStorage.tok||'')},
+  body:JSON.stringify({facts:facts.value,as_of:asof.value})});
+ out.textContent=JSON.stringify(await r.json(),null,2);};
+</script></body></html>"""
 
 
 class AnalyzeRequest(BaseModel):
@@ -34,9 +52,10 @@ def get_service() -> LegalService:   # placeholder — create_app/ test override
     raise RuntimeError("get_service chưa cấu hình")
 
 
-def create_app(*, jwt_secret: str, service_provider) -> FastAPI:
+def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = None) -> FastAPI:
     app = FastAPI(title="TraLuat API")
     app.dependency_overrides[get_service] = service_provider
+    app.state.metrics = metrics or Metrics()
 
     def auth(authorization: str | None = Header(default=None)) -> TenantContext:
         if not authorization or not authorization.startswith("Bearer "):
@@ -51,6 +70,14 @@ def create_app(*, jwt_secret: str, service_provider) -> FastAPI:
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/", response_class=HTMLResponse)
+    def index():                       # W7 Experience (tối thiểu) — form + nhãn AI
+        return _INDEX_HTML
+
+    @app.get("/metrics", response_class=PlainTextResponse)
+    def metrics_ep():                  # observability — scrape Prometheus
+        return app.state.metrics.render()
 
     @app.post("/analyze")
     def analyze(

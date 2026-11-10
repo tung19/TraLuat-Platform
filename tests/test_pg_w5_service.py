@@ -46,6 +46,19 @@ CASE = CaseInput(facts="vốn pháp định tối thiểu của doanh nghiệp")
 CTX = TenantContext("t1", role="lawyer")
 
 
+def test_metrics_increment(session: Session):
+    from traluat.w5.metrics import Metrics
+    load_to_w2(session, frbr_uri=FRBR, doc_type="nghi_dinh", date_effective=D(2021, 1, 1),
+               units=build_ingest(SAMPLE, "nd99"), doc_number="99/2020/NĐ-CP")
+    m = Metrics()
+    svc = LegalService(session, local_gateway=EchoLLMGateway(),
+                       claude_gateway=EchoLLMGateway(), metrics=m)
+    svc.analyze(CASE, D(2022, 1, 1), CTX, local_available=True)
+    assert m.value("traluat_requests_total", tenant="t1", action="analyze") == 1
+    svc.analyze(CASE, D(2022, 1, 1), CTX, local_available=False)   # deny
+    assert m.value("traluat_egress_denied_total", tenant="t1") == 1
+
+
 def test_client_data_routes_local_and_audits(session: Session):
     svc = _svc(session)
     r = svc.analyze(CASE, D(2022, 1, 1), CTX, local_available=True)   # facts sensitive (I3)

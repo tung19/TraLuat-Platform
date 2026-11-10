@@ -13,6 +13,7 @@ from .tasks import CeleryTaskQueue, InMemoryTaskQueue, TaskQueue, TaskRunner
 from .service import LegalService, ServiceResponse
 from .auth import decode_context
 from .rls import rls_ddl, set_tenant
+from .crypto import CryptoShredded, KMSProvider, SoftwareKMS, TenantCrypto
 
 __all__ = [
     "TenantContext", "MissingTenant", "ResidencyViolation", "require_role",
@@ -22,4 +23,5 @@ __all__ = [
     "TaskRunner", "TaskQueue", "InMemoryTaskQueue", "CeleryTaskQueue",
     "LegalService", "ServiceResponse",
     "decode_context", "rls_ddl", "set_tenant",
+    "TenantCrypto", "SoftwareKMS", "KMSProvider", "CryptoShredded",
 ]

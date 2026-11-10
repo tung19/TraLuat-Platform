@@ -46,6 +46,7 @@ class LegalService:
         elements_by_eid: dict[str, list[str]] | None = None,
         egress: EgressPolicy | None = None,
         audit: AuditLog | None = None,
+        metrics=None,
     ) -> None:
         self.s = session
         self.local_gateway = local_gateway
@@ -55,6 +56,7 @@ class LegalService:
         self.elements_by_eid = elements_by_eid
         self.egress = egress or EgressPolicy()
         self.audit = audit or AuditLog()
+        self.metrics = metrics
 
     def _gateway_for(self, dest: LLMDestination) -> LLMGateway | None:
         if dest == LLMDestination.LOCAL:
@@ -79,6 +81,11 @@ class LegalService:
             tenant_id=ctx.tenant_id, actor=actor, action=action, resource="case",
             trace_id=trace_id, data_class=data_class.value,
             residency=ctx.residency_region, llm_destination=decision.destination.value)
+        if self.metrics is not None:
+            self.metrics.inc("traluat_requests_total", tenant=ctx.tenant_id, action=action)
+            self.metrics.inc("traluat_route_total", dest=decision.destination.value)
+            if decision.destination.value == "deny":
+                self.metrics.inc("traluat_egress_denied_total", tenant=ctx.tenant_id)
         return decision, intent, self._gateway_for(decision.destination)
 
     def analyze(
