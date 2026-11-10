@@ -26,7 +26,7 @@
 | **FR-05** | **Citation Verifier** 3 cổng (exists/in-force/supports) + 6 lớp + **abstain** | W3 §2 | MOAT | ✅ **DONE** | `w3/grounding` gate1/2/3b + NLI + R1 abstain. |
 | **FR-06** | **Đa-vai suy luận** (bounded, như cơ chế verify — không role-play) | W4 + W7 §2 | MOAT | ✅ **DONE** | `w4/multi_role` + Auditor hard-gate. |
 | **FR-07** | **LAW-TRUE** — mù địa vị bị cáo; thiên vị tách `integrity_note` | W4 | MOAT | ✅ **DONE** | `w4` LAW-TRUE + integrity_note. |
-| **FR-08** | **ComplianceAdvisory** — hoạt động DN → vi phạm? + cách tránh + trích dẫn | W7 §1 | MOAT/BACKLOG | ❌ **SPEC** | nhóm-2, CHƯA code. |
+| **FR-08** | **ComplianceAdvisory** — hoạt động DN → vi phạm? + cách tránh + trích dẫn | W7 §1 | MOAT/BACKLOG | ✅ **DONE** | `ComplianceAdvisoryService` + `/advise` (khách→local, grounded cite-or-abstain, HITL). |
 | **FR-09** | **ComplianceDiff khi luật đổi** + **alert-trigger** (VB/dự thảo mới → tự rà lại hợp đồng khách) | W6 §1.5 + change-watch trigger | MOAT | ✅ **DONE** | `ComplianceDiffService` + `w5/alerts` (materialize→fan-out) + `/alerts`. |
 | **FR-41** | **Cross-document conflict & consistency check** (Luật nói A, Thông tư nói B → theo thứ bậc cái nào thắng; phát hiện vượt-uỷ-quyền) | W2 §4 `resolve_conflict` + `legal-rule-base` + W6 service | MOAT | ✅ **DONE** | RESOLUTION (lex superior/posterior/abstain) + DETECTION số + **ngữ-nghĩa deontic** (`DeonticConflictDetector` cho-phép↔cấm, tất định). Mâu thuẫn tinh-vi hơn vẫn cắm NLI cùng port. |
 
@@ -148,9 +148,9 @@
 ## 📊 Rollup trạng thái (đối chiếu code 2026-11-10)
 
 **41 FR chính + 14 mục FR-35.x + 6 CN:**
-- ✅ **DONE (28 FR)**: FR-01,02,03,05,06,07,09,10,11,12,13,16,17,19,21,22,23,24,25,26,27,28,29,30,34,36,37,39,40 *(≈29 incl. tiện ích)*
+- ✅ **DONE (29 FR)**: FR-01,02,03,05,06,07,09,10,11,12,13,16,17,19,21,22,23,24,25,26,27,28,29,30,34,36,37,39,40 *(≈29 incl. tiện ích)*
 - 🟡 **WIP (3)**: FR-04 (EN xong/ZH defer) · FR-15 (draft generic) · FR-20 (thiếu đo scan)
-- ❌ **SPEC chưa code (1)**: FR-08 ComplianceAdvisory
+- ❌ **SPEC chưa code (0)**: — (hết)
 - 🔵 **DEFER theo spec (3+1)**: FR-31,32,33 + FR-04-ZH
 - **FR-35.x**: **14/14 DONE** (công thức+lịch tính đúng; lookup cần data thật)
 - **CN**: **6/6 DONE**

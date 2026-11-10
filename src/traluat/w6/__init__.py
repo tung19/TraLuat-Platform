@@ -6,16 +6,41 @@ tranh biện · map doc_type mơ hồ · ngôn ngữ) → tách engine khỏi lu
 """
 
 from .jurisdiction import (
-    JurisdictionPack, VN_PACK, get_pack, load_pack, register_pack,
+    VN_PACK,
+    JurisdictionPack,
+    get_pack,
+    load_pack,
+    register_pack,
 )
 from .workflows import (
-    ComplianceDiffService, DraftResult, JudgmentAnalysisService, JudgmentFinding,
-    PetitionDraftService, RequiredClauseRule, ReviewFinding, ReviewService, UnitDiff,
+    AdvisoryResult,
+    ComplianceAdvisoryService,
+    ComplianceDiffService,
+    DraftResult,
+    JudgmentAnalysisService,
+    JudgmentFinding,
+    PetitionDraftService,
+    RequiredClauseRule,
+    ReviewFinding,
+    ReviewService,
+    UnitDiff,
 )
 
 __all__ = [
-    "JurisdictionPack", "VN_PACK", "get_pack", "load_pack", "register_pack",
-    "ComplianceDiffService", "JudgmentAnalysisService", "UnitDiff", "JudgmentFinding",
-    "ReviewService", "RequiredClauseRule", "ReviewFinding",
-    "PetitionDraftService", "DraftResult",
+    "VN_PACK",
+    "AdvisoryResult",
+    "ComplianceAdvisoryService",
+    "ComplianceDiffService",
+    "DraftResult",
+    "JudgmentAnalysisService",
+    "JudgmentFinding",
+    "JurisdictionPack",
+    "PetitionDraftService",
+    "RequiredClauseRule",
+    "ReviewFinding",
+    "ReviewService",
+    "UnitDiff",
+    "get_pack",
+    "load_pack",
+    "register_pack",
 ]

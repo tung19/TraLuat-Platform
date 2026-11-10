@@ -180,7 +180,7 @@ def _viewer():
 def test_tools_page(client):
     r = client.get("/tools")
     assert r.status_code == 200
-    for frag in ("/lookup", "/summarize", "/compare", "/draft", "/deadline"):   # form endpoints
+    for frag in ("/lookup", "/summarize", "/advise", "/compare", "/draft", "/deadline"):
         assert frag in r.text
     assert "Hỏi–đáp pháp lý" in r.text and "?lang=en" in r.text   # VI + toggle
 
@@ -277,6 +277,24 @@ def test_draft_endpoint_abstain_no_template(client):
 
 def test_draft_viewer_forbidden(client):
     r = client.post("/draft", json={"kind": "x", "facts": "y", "as_of": "2022-01-01"},
+                    headers=_viewer())
+    assert r.status_code == 403
+
+
+def test_advise_endpoint(client):
+    # FR-08 — hoạt động DN → local, grounded (Echo → abstain nhưng wiring đúng)
+    r = client.post("/advise", json={"activity": "kinh doanh rượu không giấy phép",
+                                      "as_of": "2022-01-01"}, headers=_lawyer())
+    assert r.status_code == 200
+    d = r.json()
+    assert "abstain" in d and d["ai_label"] and d["route"] == "local"
+    assert d["hitl_required"] is True
+    assert client.post("/advise", json={"activity": "x", "as_of": "bad"},
+                       headers=_lawyer()).status_code == 422
+
+
+def test_advise_viewer_forbidden(client):
+    r = client.post("/advise", json={"activity": "x", "as_of": "2022-01-01"},
                     headers=_viewer())
     assert r.status_code == 403
 

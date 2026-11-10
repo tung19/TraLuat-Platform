@@ -116,6 +116,44 @@ class PetitionDraftService:
 
 
 @dataclass
+class AdvisoryResult:
+    abstain: bool
+    reason: str = ""
+    advice: str = ""                 # phân tích vi phạm + cách tránh (grounded)
+    citations: list[str] = field(default_factory=list)
+    ai_label: bool = True
+
+
+class ComplianceAdvisoryService:
+    """FR-08 — Tư vấn tuân thủ: mô tả hoạt động DN → điều luật liên quan → có vi phạm
+    không + cách tránh, GROUNDED (cite-or-abstain), nhãn AI. Hoạt động = dữ liệu khách
+    → egress LOCAL (gateway truyền vào). High-stakes → abstain khi không đủ căn cứ.
+    """
+
+    def __init__(self, session: Session, *, gateway, nli=None) -> None:
+        self.s = session
+        self.gateway = gateway
+        self.nli = nli
+
+    def advise(self, activity: str, as_of: dt.date, *,
+               tenant_id: str | None = None, lang: str = "vi", top_k: int = 8) -> AdvisoryResult:
+        from ..w3 import ground, retrieve
+        cands = retrieve(self.s, activity, as_of, lang=lang, top_k=top_k)
+        if not cands:
+            return AdvisoryResult(True, reason="insufficient_retrieval")
+        prompt = (f"HOẠT ĐỘNG DOANH NGHIỆP:\n{activity}\n\nĐối chiếu điều luật liên quan: "
+                  "nêu rõ CÓ/KHÔNG dấu hiệu vi phạm, CÁCH TRÁNH, viện dẫn điều–khoản.")
+        d = self.gateway.generate(prompt, cands, as_of=as_of, node="advisory",
+                                  tenant_id=tenant_id, lang=lang)
+        allowed = {c.unit_eid for c in cands}
+        cited = [c.unit_eid for c in d.citations if c.unit_eid in allowed]
+        g = ground(self.s, d.text, as_of, cited, lang, self.nli)
+        if g.abstain:
+            return AdvisoryResult(True, reason=g.reason, advice=d.text)
+        return AdvisoryResult(False, advice=d.text, citations=g.supported_eids)
+
+
+@dataclass
 class JudgmentFinding:
     flagged: bool
     reason: str              # "" nếu không cờ

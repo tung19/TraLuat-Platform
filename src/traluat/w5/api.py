@@ -98,6 +98,12 @@ class DraftRequest(BaseModel):         # FR-34/15 soạn đơn/HĐ (tình tiết
     lang: str = "vi"
 
 
+class AdviseRequest(BaseModel):        # FR-08 tư vấn tuân thủ (hoạt động khách → local)
+    activity: str
+    as_of: str
+    lang: str = "vi"
+
+
 class JudgmentRequest(BaseModel):      # FR-03 second-opinion (CN-03 high-risk)
     cited_eids: list[str]
     expected_governing: list[str]
@@ -266,6 +272,11 @@ as_of <input id="wa" type="date" value="2022-06-01"><button onclick="deadline()"
 T1 <input id="c1" type="date" value="2021-06-01"> T2 <input id="c2" type="date" value="2022-06-01">
 <button onclick="compare()">So</button></div><div id="cout"></div></section>
 
+<section><h2>Tư vấn tuân thủ (FR-08) · hoạt động khách → local</h2>
+<textarea id="af" rows="3" style="width:100%" placeholder="mô tả hoạt động DN...">kinh doanh rượu bia nhập khẩu</textarea>
+<div class=row><input id="ad" type="date" value="2022-01-01"><button onclick="advise()">Tư vấn</button></div>
+<div id="aout"></div></section>
+
 <section><h2>Soạn đơn từ mẫu (FR-34) · tình tiết khách → local</h2>
 <div class=row>loại <input id="dk" size="14" value="khoi_kien">
 <input id="dd" type="date" value="2022-01-01"></div>
@@ -305,6 +316,13 @@ async function compare(){const o=document.getElementById('cout');o.innerHTML='..
   if(!d.changes.length){o.innerHTML='<small>Không có thay đổi giữa 2 ngày.</small>';return;}
   o.innerHTML=d.changes.map(c=>'<p><span class=cite>'+esc(c.eid)+'</span> <b>'+c.change+'</b><br>'
     +'<small>T1:</small> '+esc(c.a||'∅')+'<br><small>T2:</small> '+esc(c.b||'∅')+'</p>').join('');}
+async function advise(){const o=document.getElementById('aout');o.innerHTML='...';
+  const r=await fetch('/advise',{method:'POST',headers:hdr(1),body:JSON.stringify(
+    {activity:af.value,as_of:ad.value})});const d=await r.json();
+  if(r.status!=200){o.innerHTML='<p class=ab>Lỗi '+r.status+'</p>';return;}
+  o.innerHTML=d.abstain?('<p class=ab>⛔ abstain: '+esc(d.reason)+'</p>')
+    :('<pre>'+esc(d.advice)+'</pre><p>'+cites(d.citations)+'</p>')
+    +'<small>🤖 AI · route=local · cần người xác nhận</small>';}
 async function draft(){const o=document.getElementById('dout');o.innerHTML='...';
   const r=await fetch('/draft',{method:'POST',headers:hdr(1),body:JSON.stringify(
     {kind:dk.value,facts:df.value,as_of:dd.value})});const d=await r.json();
@@ -647,6 +665,25 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         return {"abstain": d.abstain, "reason": d.reason, "text": d.text,
                 "template_id": d.template_id, "citations": d.citations,
                 "ai_label": d.ai_label, "route": "local", "trace_id": tid}
+
+    @app.post("/advise")
+    def advise(body: AdviseRequest, ctx: TenantContext = Depends(auth),
+               svc: LegalService = Depends(get_service)):
+        # FR-08 — tư vấn tuân thủ: hoạt động DN = dữ liệu khách → CHỈ local (R2 no-failover).
+        need(ctx, "lawyer", "reviewer", "owner")
+        tid, intent = audited(svc, ctx, "advise", data_class="client-sensitive",
+                              destination="local", resource="advisory")
+        if not svc.local_gateway.healthy():
+            svc.audit.confirm(intent, "denied")
+            return {"abstain": True, "reason": "local_unavailable",
+                    "ai_label": True, "trace_id": tid}
+        from ..w6 import ComplianceAdvisoryService
+        a = ComplianceAdvisoryService(svc.s, gateway=svc.local_gateway, nli=svc.nli).advise(
+            body.activity, parse_date(body.as_of), tenant_id=ctx.tenant_id, lang=body.lang)
+        svc.audit.confirm(intent, "done")
+        return {"abstain": a.abstain, "reason": a.reason, "advice": a.advice,
+                "citations": a.citations, "ai_label": a.ai_label, "route": "local",
+                "trace_id": tid, "hitl_required": True}   # high-stakes → người xác nhận
 
     @app.get("/deadline")
     def deadline(kind: str, start: str, as_of: str | None = None,
