@@ -28,6 +28,20 @@ def _provider():
         s.close()
 
 
+def _build_neo4j():
+    uri = os.environ.get("NEO4J_URI")          # vd bolt://localhost:7687
+    if not uri:
+        return None
+    try:
+        from neo4j import GraphDatabase
+        drv = GraphDatabase.driver(uri, auth=(
+            os.environ.get("NEO4J_USER", "neo4j"), os.environ.get("NEO4J_PASSWORD", "")))
+        drv.verify_connectivity()
+        return drv
+    except Exception:  # noqa: BLE001 — Neo4j không bắt buộc (fallback in-degree)
+        return None
+
+
 app = create_app(
     jwt_secret=os.environ.get("JWT_SECRET", "dev-secret-change-me-0123456789abcd"),
-    service_provider=_provider, metrics=_metrics)
+    service_provider=_provider, metrics=_metrics, neo4j_driver=_build_neo4j())

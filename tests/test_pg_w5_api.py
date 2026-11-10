@@ -85,6 +85,14 @@ def test_index_and_metrics(client):
 def test_graph_view_page(client):
     r = client.get("/graph")
     assert r.status_code == 200 and "cytoscape" in r.text and "đồ thị" in r.text
+    assert "PageRank" in r.text and "in-degree" in r.text   # overlay importance
+
+
+def test_graph_central_empty_without_neo4j(client):
+    # không cấu hình Neo4j → /graph/central trả {} (frontend fallback in-degree)
+    r = client.get("/graph/central",
+                   headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='viewer')}"})
+    assert r.status_code == 200 and r.json() == {}
 
 
 def test_graph_endpoint(client):

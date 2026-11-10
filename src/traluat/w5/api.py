@@ -81,57 +81,75 @@ small{color:#64748b}
 </style></head><body>
 <div id="bar">
 <b>TraLuat · đồ thị quy phạm</b>
-Điều: <input id="eid" value="nd99__dieu_5" size="22">
+Điều: <input id="eid" value="nd99__dieu_5" size="20">
 as_of: <input id="asof" type="date" value="2022-01-01">
 hops: <input id="hops" type="number" value="2" min="1" max="3" size="2">
 <button onclick="load()">Vẽ</button>
-Token: <input id="tok" size="28" placeholder="Bearer JWT">
-<span class="lg" id="lg"></span>
+Token: <input id="tok" size="24" placeholder="Bearer JWT">
+<span id="flt" class="lg"></span>
+<small id="szmode"></small>
 </div>
 <div id="cy"></div>
-<p style="padding:0 1rem"><small>Click một node để mở rộng lân cận. Mũi tên = chiều quan hệ (src→dst). Màu theo loại.</small></p>
 <script>
 const COL={cites:'#64748b',guides:'#2563eb',repeals:'#b91c1c',replaces:'#ca8a04',conflicts:'#db2777',hierarchy:'#16a34a'};
-document.getElementById('lg').innerHTML=Object.entries(COL).map(([k,v])=>`<span style="background:${v}">${k}</span>`).join('');
-let cy;
+const enabled=new Set(Object.keys(COL));          // filter theo loại
+let cy, central={}, raw={nodes:[],edges:[]};
+// checkbox filter loại quan hệ
+document.getElementById('flt').innerHTML=Object.entries(COL).map(([k,v])=>
+  `<label style="background:${v};cursor:pointer"><input type=checkbox checked onchange="tog('${k}',this.checked)">${k}</label>`).join('');
+function tog(t,on){on?enabled.add(t):enabled.delete(t);draw();}
 function hdr(){return {'Authorization':'Bearer '+document.getElementById('tok').value}}
-async function fetchGraph(eid){
-  const q=new URLSearchParams({as_of:asof.value,hops:hops.value});
-  const r=await fetch('/graph/'+encodeURIComponent(eid)+'?'+q,{headers:hdr()});
-  if(!r.ok){alert('Lỗi '+r.status);return null}
-  return r.json();
+async function fetchGraph(e){const q=new URLSearchParams({as_of:asof.value,hops:hops.value});
+  const r=await fetch('/graph/'+encodeURIComponent(e)+'?'+q,{headers:hdr()});
+  if(!r.ok){alert('Lỗi '+r.status);return null}return r.json();}
+function merge(d){const ne=new Set(raw.nodes.map(n=>n.eid));
+  for(const n of d.nodes) if(!ne.has(n.eid)){raw.nodes.push(n);ne.add(n.eid);}
+  const ee=new Set(raw.edges.map(e=>e.src+'>'+e.dst+'>'+e.type));
+  for(const e of d.edges){const k=e.src+'>'+e.dst+'>'+e.type;if(!ee.has(k)){raw.edges.push(e);ee.add(k);}}}
+function sizeOf(eid,indeg,maxc){
+  if(maxc>0 && central[eid]!=null) return 14+40*(central[eid]/maxc);   // PageRank (GDS)
+  return 14+Math.min(indeg*7,40);                                       // fallback in-degree
 }
-function toElements(d,center){
-  const els=[];const seen=new Set();
-  for(const n of d.nodes){if(seen.has(n.eid))continue;seen.add(n.eid);
-    els.push({data:{id:n.eid,label:n.label||n.eid},classes:n.eid===center?'ctr':''});}
-  for(const e of d.edges) els.push({data:{id:e.src+'>'+e.dst+'>'+e.type,source:e.src,target:e.dst,type:e.type}});
-  return els;
-}
-function render(els){
+function draw(){
+  const edges=raw.edges.filter(e=>enabled.has(e.type));
+  const indeg={}; for(const e of edges) indeg[e.dst]=(indeg[e.dst]||0)+1;
+  const show=new Set(); edges.forEach(e=>{show.add(e.src);show.add(e.dst);});
+  if(center) show.add(center);
+  const maxc=Math.max(0,...Object.values(central));
+  const els=[];
+  for(const n of raw.nodes) if(show.has(n.eid))
+    els.push({data:{id:n.eid,label:n.label||n.eid,sz:sizeOf(n.eid,indeg[n.eid]||0,maxc)},classes:n.eid===center?'ctr':''});
+  for(const e of edges) els.push({data:{id:e.src+'>'+e.dst+'>'+e.type,source:e.src,target:e.dst,type:e.type}});
+  document.getElementById('szmode').textContent = maxc>0?'kích thước = PageRank (GDS)':'kích thước = in-degree';
+  if(cy)cy.destroy();
   cy=cytoscape({container:document.getElementById('cy'),elements:els,
    style:[
-    {selector:'node',style:{'label':'data(label)','font-size':'10px','background-color':'#0f172a','color':'#0f172a','text-valign':'bottom','text-wrap':'wrap','text-max-width':'120px','width':16,'height':16}},
-    {selector:'node.ctr',style:{'background-color':'#2563eb','width':24,'height':24,'font-weight':'bold'}},
+    {selector:'node',style:{'label':'data(label)','font-size':'10px','background-color':'#334155','color':'#0f172a','text-valign':'bottom','text-wrap':'wrap','text-max-width':'120px','width':'data(sz)','height':'data(sz)'}},
+    {selector:'node.ctr',style:{'background-color':'#2563eb','border-width':3,'border-color':'#1e40af'}},
     {selector:'edge',style:{'width':2,'curve-style':'bezier','target-arrow-shape':'triangle','line-color':ele=>COL[ele.data('type')]||'#94a3b8','target-arrow-color':ele=>COL[ele.data('type')]||'#94a3b8','label':'data(type)','font-size':'8px','color':'#64748b'}}],
    layout:{name:'cose',animate:false}});
-  cy.on('tap','node',async ev=>{const d=await fetchGraph(ev.target.id());if(!d)return;
-    cy.add(toElements(d,null).filter(e=>!cy.getElementById(e.data.id).length));
-    cy.layout({name:'cose',animate:false}).run();});
+  cy.on('tap','node',async ev=>{const d=await fetchGraph(ev.target.id());if(d){merge(d);draw();}});
 }
+let center=null;
 async function load(){const d=await fetchGraph(eid.value);if(!d)return;
-  if(cy)cy.destroy();render(toElements(d,d.center));}
-</script></body></html>"""
+  raw={nodes:[],edges:[]};center=d.center;merge(d);
+  try{const r=await fetch('/graph/central',{headers:hdr()});central=r.ok?await r.json():{};}catch(e){central={};}
+  draw();}
+</script>
+<style>#flt label{font-size:.72rem;padding:.1rem .4rem;border-radius:.3rem;color:#fff;margin-right:.2rem}
+#flt input{margin-right:.2rem}</style></body></html>"""
 
 
 def get_service() -> LegalService:   # placeholder — create_app/ test override
     raise RuntimeError("get_service chưa cấu hình")
 
 
-def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = None) -> FastAPI:
+def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = None,
+               neo4j_driver=None) -> FastAPI:
     app = FastAPI(title="TraLuat API")
     app.dependency_overrides[get_service] = service_provider
     app.state.metrics = metrics or Metrics()
+    app.state.neo4j_driver = neo4j_driver   # None → /graph/central trả {} (fallback degree)
 
     def auth(authorization: str | None = Header(default=None)) -> TenantContext:
         if not authorization or not authorization.startswith("Bearer "):
@@ -158,6 +176,15 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     @app.get("/graph", response_class=HTMLResponse)
     def graph_view():                  # FR-37 — vẽ đồ thị quan hệ quy phạm (Cytoscape)
         return _GRAPH_HTML
+
+    @app.get("/graph/central")
+    def graph_central(ctx: TenantContext = Depends(auth)):
+        # GDS PageRank 'luật trọng tâm' {eid: score} — chỉ khi Neo4j cấu hình; else {}.
+        drv = app.state.neo4j_driver
+        if drv is None:
+            return {}
+        from ..w2.graph_neo4j import gds_pagerank
+        return dict(gds_pagerank(drv))
 
     @app.get("/graph/{eid}")
     def graph(eid: str, as_of: str | None = None, hops: int = 1,
