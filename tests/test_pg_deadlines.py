@@ -96,6 +96,26 @@ def test_holiday_from_reference_rolls_deadline(session: Session):
     assert r.deadline == D(2022, 3, 17)             # T5 kế tiếp
 
 
+def test_rollover_across_year_boundary_uses_next_year_holidays(session: Session):
+    # F5: hạn rơi cuối năm, lùi sang lễ ÂM năm SAU phải được nạp (không chỉ raw.year).
+    from traluat.w1.reference import RefRow as RR
+    upsert_reference(session, "thoi_hieu", [
+        RR("khieu_nai_lan_dau", {"value": 1, "unit": "day"},
+           D(2012, 7, 1), None, "luatkn__dieu_9")], pii_check=False)
+    # Tết 2023 (âm) rơi 2023-01-23; mốc 2023-01-22 + 1 ngày = 2023-01-23 (lễ năm sau
+    # so với mốc cuối 2022? dùng ngay năm 2023 để chứng minh union năm kế). Ở đây minh
+    # hoạ union: đánh dấu 2023-12-31→2024-01-01 là lễ để lùi qua giao thừa dương.
+    upsert_reference(session, "ngay_nghi", [
+        RR("2023", {"dates": ["2023-12-30"]}, D(2000, 1, 1), None, None),
+        RR("2024", {"dates": ["2024-01-01", "2024-01-02"]}, D(2000, 1, 1), None, None)],
+        pii_check=False)
+    # mốc 2023-12-29 (T6) +1 = 2023-12-30 (T7 + lễ) → lùi: 31(CN) · 01/01(lễ 2024) ·
+    # 02/01(lễ 2024) · 03/01(T4) = ngày làm. Cần lễ 2024 (năm sau) mới ra đúng.
+    r = compute_deadline(session, "khieu_nai_lan_dau", D(2023, 12, 29), D(2024, 1, 1))
+    assert r.rolled_from == D(2023, 12, 30)
+    assert r.deadline == D(2024, 1, 3)             # lùi qua lễ năm 2024 (union năm kế)
+
+
 def test_no_data_raises(session: Session):
     with pytest.raises(LookupError):
         compute_deadline(session, "khong_co", D(2022, 1, 1), D(2022, 1, 1))

@@ -29,8 +29,9 @@ Rà soát đối-nghịch code mới (L9 endpoints, deadlines/calendar, geo, ale
 - **Lỗi**: `dt.date.fromisoformat(...)` thẳng trong handler (/lookup,/compare,/deadline,/analyze,/doc,/draft,/judgment) → ngày sai/thiếu → ValueError → **500** (lẽ ra lỗi client → 4xx). Gây alert on-call nhầm + client không biết mình sai.
 - **Sửa**: helper `parse_date(s, *, default)` → `HTTPException(422)` cho ngày sai; field bắt buộc thiếu → 422; field tuỳ chọn bỏ trống → default (today/None). Thay 9 call-site. Test `test_bad_date_returns_422_not_500` + `test_optional_date_omitted_still_ok`.
 
-## ⚠️ F5 (edge — GHI NHẬN): deadline lùi qua ranh giới NĂM
-- `compute_deadline` nạp `ngay_nghi` chỉ cho `raw.year`. Nếu hạn rơi 31/12 rồi lùi sang năm sau → lễ âm năm sau không có trong set (lễ dương built-in vẫn đúng). Edge hiếm. (Chưa sửa.)
+## ✅ F5 (edge — ĐÃ SỬA): deadline lùi qua ranh giới NĂM
+- **Lỗi**: `compute_deadline` nạp `ngay_nghi` chỉ cho `raw.year`; hạn rơi cuối năm rồi lùi sang năm sau → lễ âm năm sau bị bỏ sót → ngày hết hạn sai.
+- **Sửa**: union lễ của `raw.year` **và** `raw.year+1`. Regression `test_rollover_across_year_boundary_uses_next_year_holidays` (verified: fail nếu thiếu union, pass khi có).
 
 ## Đã kiểm — KHÔNG phải lỗi
 - **Deadline math hợp luật**: ngày (X+N, "ngày bắt đầu không tính" khớp khi mốc=ngày sự kiện) · tháng/năm (ngày tương ứng, kẹp cuối tháng) — đúng BLTTDS Đ.182-184, BLDS Đ.147-148.
