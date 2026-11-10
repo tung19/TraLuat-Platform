@@ -72,6 +72,17 @@ def test_dense_finds_what_lexical_misses(session: Session, embedder):
     assert "nd99__dieu_3__khoan_2" in dense_top         # dense bắt được (ngữ nghĩa)
 
 
+def test_cross_lingual_en_query_finds_vn_law(session: Session, embedder):
+    # WP3 tam ngữ: câu hỏi TIẾNG ANH → đúng điều luật TIẾNG VIỆT (bge-m3 đa ngữ,
+    # cùng vector space). Nền cho FR-04 tam ngữ (route embedding theo ngôn ngữ).
+    if session.execute(sa.text("select to_regclass('public.chunk')")).scalar() is None:
+        pytest.skip("bảng chunk chưa migrate")
+    reindex_document(session, FRBR, embedder=embedder)
+    res = retrieve_indexed(session, "minimum legal capital to establish a company",
+                           D(2022, 1, 1), embedder=embedder)
+    assert "nd99__dieu_3__khoan_2" in {r.unit_eid for r in res[:3]}   # EN → VN 'vốn pháp định'
+
+
 def test_indexed_dense_via_pgvector(session: Session, embedder):
     # L4: reindex embed theo lô → retrieve_indexed dùng HNSW pgvector (không per-query embed corpus)
     if session.execute(sa.text("select to_regclass('public.chunk')")).scalar() is None:
