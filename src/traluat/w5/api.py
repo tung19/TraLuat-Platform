@@ -98,6 +98,14 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     def metrics_ep():                  # observability — scrape Prometheus
         return app.state.metrics.render()
 
+    @app.get("/graph/{eid}")
+    def graph(eid: str, as_of: str | None = None, hops: int = 1,
+              ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
+        # Đồ thị quan hệ quy phạm quanh 1 điều (KB công) — FR-37 visualize.
+        from ..w2 import repo
+        a = dt.date.fromisoformat(as_of) if as_of else None
+        return repo.neighborhood(svc.s, eid, a, max_hops=min(hops, 3))
+
     @app.post("/analyze")
     def analyze(
         body: AnalyzeRequest,

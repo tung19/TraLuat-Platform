@@ -82,6 +82,15 @@ def test_index_and_metrics(client):
     assert client.get("/metrics").status_code == 200           # observability scrape
 
 
+def test_graph_endpoint(client):
+    r = client.get("/graph/nd99__dieu_1",
+                   headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='viewer')}"})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["center"] == "nd99__dieu_1"
+    assert any(n["eid"] == "nd99__dieu_1" for n in d["nodes"])   # FR-37 graph data
+
+
 def test_analyze_lawyer_ok(client):
     r = client.post("/analyze", json=BODY,
                     headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='lawyer')}"})

@@ -409,6 +409,46 @@ def resolve_conflict(
                           unresolved=True)
 
 
+# ── Neighborhood: subgraph quanh 1 điều (cho visualize FR-37) ────────────────────
+def neighborhood(
+    s: Session, eid: str, as_of: dt.date | None = None,
+    rel_types: list[str] | None = None, max_hops: int = 1,
+) -> dict:
+    """Trả {center, nodes, edges} — đồ thị lân cận (cả 2 chiều) tới max_hops, lọc
+    hiệu lực cạnh theo as_of. Nodes = unit (eid/label/type); edges = quan hệ có hướng."""
+    as_of = as_of or dt.date.max
+    frontier = {_unit_id(s, eid)}
+    seen_ids = set(frontier)
+    rels: dict[int, NormRelation] = {}
+    for _ in range(max_hops):
+        if not frontier:
+            break
+        q = sa.select(NormRelation).where(
+            sa.or_(NormRelation.src_unit_id.in_(frontier),
+                   NormRelation.dst_unit_id.in_(frontier)),
+            sa.or_(NormRelation.effective_date.is_(None),
+                   NormRelation.effective_date <= as_of))
+        if rel_types:
+            q = q.where(NormRelation.relation_type.in_(rel_types))
+        nxt = set()
+        for r in s.scalars(q):
+            if r.src_unit_id is None or r.dst_unit_id is None:
+                continue
+            rels[r.id] = r
+            for nid in (r.src_unit_id, r.dst_unit_id):
+                if nid not in seen_ids:
+                    seen_ids.add(nid); nxt.add(nid)
+        frontier = nxt
+
+    units = {u.id: u for u in s.scalars(sa.select(Unit).where(Unit.id.in_(seen_ids)))}
+    nodes = [{"eid": u.eid, "label": u.label, "type": u.unit_type} for u in units.values()]
+    edges = [{"src": units[r.src_unit_id].eid, "dst": units[r.dst_unit_id].eid,
+              "type": r.relation_type, "review_status": r.review_status}
+             for r in rels.values()
+             if r.src_unit_id in units and r.dst_unit_id in units]
+    return {"center": eid, "nodes": nodes, "edges": edges}
+
+
 # ── §5.1: multihop norm-graph (FK + recursive CTE; bounded + cycle-safe + as_of) ──
 def multihop(
     s: Session, start_eid: str, rel_types: list[str], max_hops: int = 3,

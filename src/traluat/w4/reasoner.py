@@ -18,6 +18,7 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
+from ..w2 import repo
 from ..w2.bitemporal import EffectStatus
 from ..w3 import ground
 from ..w3.chunker import Chunk
@@ -68,7 +69,7 @@ class ReasoningEngine:
     def __init__(
         self, session: Session, *, gateway: LLMGateway,
         nli: NLIVerifier | None = None, element_judge: ElementJudge | None = None,
-        elements_by_eid: dict[str, list[str]] | None = None,
+        elements_by_eid: dict[str, list[str]] | None = None, graph_hops: int = 1,
     ) -> None:
         self.s = session
         self.gateway = gateway
@@ -76,8 +77,16 @@ class ReasoningEngine:
         self.element_judge = element_judge
         self.auditor = Auditor(session, element_judge)
         self.elements_by_eid = elements_by_eid or {}
+        self.graph_hops = graph_hops   # R_chg: mở rộng ứng viên qua norm-graph (0=tắt)
 
-    # — Researcher: thu bằng chứng (uỷ W3 retrieve), KHÔNG verify —
+    def _article(self, eid: str, as_of: dt.date, lang: str) -> Article | None:
+        text = repo.reconstruct_as_of(self.s, eid, as_of, lang)
+        if text is None:
+            return None
+        return Article(unit_eid=eid, version_date=as_of, text=text,
+                       elements=self.elements_by_eid.get(eid, []))
+
+    # — Researcher: thu bằng chứng (uỷ W3 retrieve) + MỞ RỘNG qua norm-graph, KHÔNG verify —
     def _research(self, facts: str, as_of: dt.date, lang: str, top_k: int):
         cands = retrieve(self.s, facts, as_of, lang=lang, top_k=top_k)
         articles, chunk_by_eid = [], {}
@@ -87,6 +96,19 @@ class ReasoningEngine:
                 unit_eid=rc.unit_eid, version_date=as_of, text=rc.chunk.span_text,
                 elements=self.elements_by_eid.get(rc.unit_eid, []),
             ))
+        # ★ R_chg (§4.1, M8-fix): kéo điều DẪN-CHIẾU/HƯỚNG-DẪN qua đồ thị (cites/guides,
+        # hiệu-lực-aware) vào ứng viên. Auditor sẽ gác — mở rộng candidate là an toàn.
+        if self.graph_hops > 0:
+            seen = {a.unit_eid for a in articles}
+            for eid in list(seen):
+                for reached in repo.multihop(self.s, eid, ["cites", "guides"],
+                                             max_hops=self.graph_hops, as_of=as_of):
+                    if reached in seen:
+                        continue
+                    art = self._article(reached, as_of, lang)
+                    if art is not None:
+                        seen.add(reached)
+                        articles.append(art)
         return articles, chunk_by_eid
 
     # — Adjudicator: tổng hợp CHỈ trên verified; rỗng → abstain (H1) —
