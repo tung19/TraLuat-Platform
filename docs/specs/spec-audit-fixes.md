@@ -136,6 +136,15 @@
 
 ---
 
+## Round 6 — REVIEW toàn stack W1→W5 đã-implement (Nov 2026)
+
+> Review code sau khi dựng xong khung 5 tầng (87 test). 2 finding thật, sửa + test khóa. Probe adversarial: W2 (idempotent amend, half-open tại valid_from, prune precedent rỗng-cite), W3 (as_of future-event, _facts no-space/percent), W4 (empty-candidate), W5 (egress fail-closed) — tất cả ĐÚNG.
+- **🟠 #1 — `EgressPolicy.decide` route chết (W5):** public_kb trả `CLAUDE` bất kể `claude_gateway` có cấu hình không → `LegalService(claude_gateway=None)` **từ chối oan** câu hỏi dữ-liệu-công (lẽ ra chạy local). **Sửa:** `decide(..., claude_available)`; public → Claude nếu có, else fallback LOCAL, else DENY. Service truyền `claude_available=claude_gateway is not None`. Test: `test_public_without_claude_gateway_falls_back_local`.
+- **🟠 #2 — trích dẫn ngoài ngữ cảnh không bị chặn (W3/W4):** gates verify citation *có-thật+hiệu-lực+exact* nhưng KHÔNG kiểm eid có trong tập ĐÃ-truy-xuất → gateway viện dẫn điều in-force từ **kiến thức tham số** (không retrieve) vẫn lọt (vi phạm bất biến §2 "LLM chỉ trả lời từ đoạn đã truy xuất"). **Sửa:** `answer_question` lọc `citations ⊆ retrieved`; Adjudicator lọc `citations ⊆ verified`; rỗng sau lọc → abstain. Test: `test_abstain_when_citation_out_of_context`, `test_adjudicator_rejects_citation_outside_verified`.
+- **Known-limitation (ghi, chưa fix):** tenant-guard của gateway hiện no-op vì chunk chưa mang `tenant_id` (client vector store chưa có) — kích hoạt khi W5 cắm client store.
+
+---
+
 ## Thứ tự sửa (ship order)
 1. **W5 C1–C6** (rò tenant/egress = vi phạm pháp luật) + **W1 C1/C3** (gate materialize + ẩn danh) — *trước khi bất kỳ dữ liệu khách/bản án nào chạm hệ.*
 2. **W2 C1/C2 + W4 C1–C3** (bitemporal invariant + hard-gate đúng) — *trước khi tin kết quả truy xuất/suy luận.*

@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 from traluat.w1 import build_ingest, load_to_w2
 from traluat.w2.db import make_engine
 from traluat.w2.models import Document, NormRelation
-from traluat.w3 import Answer, EchoLLMGateway, HoldNLI, answer_question
+from traluat.w3 import Answer, Citation, EchoLLMGateway, HoldNLI, answer_question
+from traluat.w3.gateway import BaseLLMGateway
 
 D = dt.date
 FRBR = "trl:vn/nd/99/2020"
@@ -61,6 +62,21 @@ def test_full_loop_abstains_when_nothing_retrieved(session: Session):
         session, "qwxz zzzq kkkplm", as_of=D(2022, 1, 1),
         gateway=EchoLLMGateway(),
     )
+    assert ans.abstain and ans.reason == "insufficient_retrieval"
+
+
+class _RogueGateway(BaseLLMGateway):
+    """Viện dẫn điều KHÔNG nằm trong ngữ cảnh (mô phỏng kiến thức tham số)."""
+    def model_name(self): return "rogue"
+    def _draft(self, query, chunks, prompt, as_of, node, lang):
+        return "Theo Điều 1.", [Citation("nd99__dieu_5", as_of)]
+
+
+def test_abstain_when_citation_out_of_context(session: Session):
+    _seed(session)
+    # query vốn → KHÔNG truy xuất Điều 5 → trích dẫn ngoài ngữ cảnh bị loại → abstain
+    ans = answer_question(session, "vốn pháp định tối thiểu", as_of=D(2022, 1, 1),
+                          gateway=_RogueGateway())
     assert ans.abstain and ans.reason == "insufficient_retrieval"
 
 

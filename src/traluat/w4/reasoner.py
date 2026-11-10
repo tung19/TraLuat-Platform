@@ -86,7 +86,11 @@ class ReasoningEngine:
         ctx = [chunk_by_eid[a.unit_eid] for a in verified if a.unit_eid in chunk_by_eid]
         draft = self.gateway.generate(facts, ctx, as_of=as_of, node="adjudicator",
                                       tenant_id=tenant_id, lang=lang)
-        g = ground(self.s, draft.text, as_of, [c.unit_eid for c in draft.citations], lang, self.nli)
+        # ★ Adjudicator CHỈ được trích trong tập verified (hợp đồng thu hẹp §2) —
+        # loại trích dẫn ngoài verified (kiến thức tham số / điều đã bị loại ở cổng).
+        allowed = {a.unit_eid for a in verified}
+        cited = [c.unit_eid for c in draft.citations if c.unit_eid in allowed]
+        g = ground(self.s, draft.text, as_of, cited, lang, self.nli)
         if g.abstain:
             return PartyResult(party, abstain=True, reason=g.reason, relief=draft.text)
         return PartyResult(

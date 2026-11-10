@@ -74,7 +74,10 @@ class LegalService:
         # provenance tất định (không đoán nội dung): KB công + (nếu có) upload khách
         provenances = ([f"tenant:{ctx.tenant_id}"] if client_data else []) + [PUBLIC_KB]
         data_class = self.egress.classify(provenances)
-        decision = self.egress.decide(data_class, local_available=local_available)
+        decision = self.egress.decide(
+            data_class, local_available=local_available,
+            claude_available=self.claude_gateway is not None,
+        )
 
         intent = self.audit.record_intent(      # write-ahead TRƯỚC khi gọi
             tenant_id=ctx.tenant_id, actor=actor, action="analyze", resource="case",

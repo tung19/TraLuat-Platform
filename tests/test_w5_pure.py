@@ -40,6 +40,13 @@ def test_egress_r2_never_failover_sensitive():
     assert pub.destination == LLMDestination.CLAUDE       # dữ liệu công → được ra ngoài
 
 
+def test_public_falls_back_local_when_claude_unavailable():
+    # review-fix #1: public + chưa cấu hình claude_gateway → LOCAL, KHÔNG deny oan
+    e = EgressPolicy()
+    d = e.decide(DataClass.PUBLIC_KB, local_available=True, claude_available=False)
+    assert d.destination == LLMDestination.LOCAL
+
+
 def test_audit_write_ahead_append_only():
     log = AuditLog()
     intent = log.record_intent(

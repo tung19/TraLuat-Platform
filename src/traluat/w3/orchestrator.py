@@ -77,9 +77,13 @@ def answer_question(
     if not draft.citations:                       # R1 sufficiency floor
         return Answer.abstained("insufficient_retrieval", as_of)
 
+    # ★ bất biến §2: LLM CHỈ được trích từ đoạn ĐÃ truy xuất — loại trích dẫn
+    # ngoài ngữ cảnh (chống viện dẫn từ kiến thức tham số). Rỗng sau lọc → abstain.
+    allowed = {rc.unit_eid for rc in cands}
+    cited = [c.unit_eid for c in draft.citations if c.unit_eid in allowed]
+
     # 3) verify từng trích dẫn (gate1/2/3b tất định + gate3 NLI tuỳ chọn)
-    g = ground(session, draft.text, as_of,
-               [c.unit_eid for c in draft.citations], lang, nli)
+    g = ground(session, draft.text, as_of, cited, lang, nli)
     if g.abstain:
         return Answer.abstained(g.reason, as_of, gates=g.gates)
 

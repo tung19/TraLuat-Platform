@@ -43,15 +43,15 @@ class EgressPolicy:
         return DataClass.CLIENT_SENSITIVE
 
     def decide(
-        self, data_class: DataClass, *, local_available: bool,
+        self, data_class: DataClass, *, local_available: bool, claude_available: bool = True,
     ) -> RouteDecision:
         if data_class == DataClass.CLIENT_SENSITIVE:
             if local_available:
                 return RouteDecision(data_class, LLMDestination.LOCAL, "sensitive→local")
             # ★ R2: local down → KHÔNG failover sang Claude; queue HITL
             return RouteDecision(data_class, LLMDestination.DENY, "local_down:hitl_queue")
-        # public_kb: được ra Claude (dữ liệu công), fallback local, else deny
-        if self.claude_allowed:
+        # public_kb: ưu tiên Claude NẾU có sẵn; không thì fallback local; else deny
+        if self.claude_allowed and claude_available:
             return RouteDecision(data_class, LLMDestination.CLAUDE, "public→claude")
         if local_available:
             return RouteDecision(data_class, LLMDestination.LOCAL, "public→local")

@@ -73,3 +73,12 @@ def test_public_lookup_allowed_to_claude(session: Session):
     r = svc.analyze(CASE, D(2022, 1, 1), CTX, client_data=False, local_available=True)
     assert r.route.destination == LLMDestination.CLAUDE   # dữ liệu công → ra ngoài được
     assert r.answered
+
+
+def test_public_without_claude_gateway_falls_back_local(session: Session):
+    # review-fix #1: không cấu hình claude_gateway → public chạy LOCAL, không deny oan
+    load_to_w2(session, frbr_uri=FRBR, doc_type="nghi_dinh", date_effective=D(2021, 1, 1),
+               units=build_ingest(SAMPLE, "nd99"), doc_number="99/2020/NĐ-CP")
+    svc = LegalService(session, local_gateway=EchoLLMGateway(), claude_gateway=None)
+    r = svc.analyze(CASE, D(2022, 1, 1), CTX, client_data=False, local_available=True)
+    assert r.route.destination == LLMDestination.LOCAL and r.answered

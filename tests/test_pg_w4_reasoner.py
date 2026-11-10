@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from traluat.w1 import build_ingest, load_to_w2
 from traluat.w2.bitemporal import EffectStatus
 from traluat.w2.db import make_engine
-from traluat.w3 import EchoLLMGateway
+from traluat.w3 import Citation, EchoLLMGateway
+from traluat.w3.gateway import BaseLLMGateway
 from traluat.w4 import CaseInput, ReasoningEngine
 
 D = dt.date
@@ -76,6 +77,20 @@ def test_element_gate_narrows_candidates(session: Session):
     veids = {a.unit_eid for a in adj.verified_articles}
     assert "nd99__dieu_3__khoan_2" not in veids          # thu hẹp bởi element gate
     assert "nd99__dieu_3__khoan_2__diem_a" in veids       # điều khác (không checklist) vẫn verify
+
+
+class _RogueGateway(BaseLLMGateway):
+    def model_name(self): return "rogue"
+    def _draft(self, query, chunks, prompt, as_of, node, lang):
+        return "Theo một điều ngoài hồ sơ.", [Citation("nd99__dieu_5", as_of)]
+
+
+def test_adjudicator_rejects_citation_outside_verified(session: Session):
+    _seed(session)
+    # Adjudicator trích Điều 5 (ngoài tập verified của query vốn) → abstain
+    eng = ReasoningEngine(session, gateway=_RogueGateway())
+    adj = eng.analyze(CaseInput(facts="vốn pháp định tối thiểu"), as_of=D(2022, 1, 1))
+    assert adj.parties[0].abstain
 
 
 def test_multi_role_deferred(session: Session):
