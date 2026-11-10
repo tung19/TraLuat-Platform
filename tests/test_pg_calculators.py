@@ -123,3 +123,29 @@ def test_gross_net_effectivity_aware(session: Session):
 
 def test_new_calcs_registered():
     assert {"thue_gtgt", "lam_them_gio", "gross_net"} <= set(available())
+    assert {"tra_mst", "bieu_thue_xnk", "lich_nop_thue", "tra_nganh",
+            "bhxh_mot_lan"} <= set(available())
+
+
+def test_lookup_calcs(session: Session):
+    upsert_reference(session, "ma_so_thue", [
+        RefRow("0101243150", {"ten": "Cty A", "trang_thai": "dang_hoat_dong"},
+               D(2020, 1, 1), None, None)], pii_check=False)
+    r = run(session, "tra_mst", {"mst": "0101243150"}, D(2022, 1, 1))
+    assert r.value["trang_thai"] == "dang_hoat_dong"
+
+    upsert_reference(session, "bieu_thue_xnk", [
+        RefRow("8703:atiga", {"rate": 0.0}, D(2020, 1, 1), None, "nd_atiga")], pii_check=False)
+    r = run(session, "bieu_thue_xnk", {"ma_hs": "8703", "hiep_dinh": "atiga"}, D(2022, 1, 1))
+    assert r.value["rate"] == 0.0 and r.source_eid == "nd_atiga"
+
+
+def test_bhxh_mot_lan_formula(session: Session):
+    upsert_reference(session, "bhxh_he_so", [
+        RefRow("muc_huong", {"truoc_2014": 1.5, "tu_2014": 2.0},
+               D(2016, 1, 1), None, "luat_bhxh__dieu_60")], pii_check=False)
+    # bình quân 6tr; 2 năm trước 2014 (×1.5) + 5 năm từ 2014 (×2.0) = 3 + 10 = 13 tháng
+    r = run(session, "bhxh_mot_lan",
+            {"binh_quan": 6_000_000, "nam_truoc_2014": 2, "nam_tu_2014": 5}, D(2022, 1, 1))
+    assert r.value["so_thang"] == 13.0 and r.value["muc_huong"] == 78_000_000
+    assert r.source_eid == "luat_bhxh__dieu_60"

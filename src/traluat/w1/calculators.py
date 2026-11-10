@@ -108,6 +108,49 @@ def _lam_them_gio(session, params, as_of) -> CalcResult:
                       f"lam_them_rate/{loai}")
 
 
+@calculator("tra_mst")
+def _tra_mst(session, params, as_of) -> CalcResult:
+    """35.3 — tra MST + tình trạng hoạt động (reference `ma_so_thue`, data đẩy)."""
+    val, src = _lookup(session, "ma_so_thue", params["mst"], as_of)
+    return CalcResult("tra_mst", val, src, as_of, f"ma_so_thue/{params['mst']}")
+
+
+@calculator("bieu_thue_xnk")
+def _bieu_thue_xnk(session, params, as_of) -> CalcResult:
+    """35.4 — biểu thuế XNK theo mã HS + hiệp định@T (reference `bieu_thue_xnk`)."""
+    key = f"{params['ma_hs']}:{params.get('hiep_dinh', 'mfn')}"
+    val, src = _lookup(session, "bieu_thue_xnk", key, as_of)
+    return CalcResult("bieu_thue_xnk", val, src, as_of, f"bieu_thue_xnk/{key}")
+
+
+@calculator("lich_nop_thue")
+def _lich_nop_thue(session, params, as_of) -> CalcResult:
+    """35.5 — hạn nộp thuế/báo cáo của một sắc thuế@T (reference `lich_nop_thue`)."""
+    val, src = _lookup(session, "lich_nop_thue", params["loai"], as_of)
+    return CalcResult("lich_nop_thue", val, src, as_of, f"lich_nop_thue/{params['loai']}")
+
+
+@calculator("tra_nganh")
+def _tra_nganh(session, params, as_of) -> CalcResult:
+    """35.10 — tra mã ngành nghề KD (VSIC) (reference `ma_nganh`)."""
+    val, src = _lookup(session, "ma_nganh", params["ma"], as_of)
+    return CalcResult("tra_nganh", val, src, as_of, f"ma_nganh/{params['ma']}")
+
+
+@calculator("bhxh_mot_lan")
+def _bhxh_mot_lan(session, params, as_of) -> CalcResult:
+    """35.8 — BHXH một lần = Σ(số tháng/năm × bình quân tiền lương), hệ-số theo giai
+    đoạn đóng (trước/sau 2014) HIỆU-LỰC@T (reference `bhxh_he_so`, neo Luật BHXH).
+    params={binh_quan, nam_truoc_2014, nam_tu_2014}."""
+    bq = float(params["binh_quan"])
+    r, src = _lookup(session, "bhxh_he_so", "muc_huong", as_of)
+    thang = (float(params.get("nam_truoc_2014", 0)) * float(r["truoc_2014"])
+             + float(params.get("nam_tu_2014", 0)) * float(r["tu_2014"]))
+    return CalcResult("bhxh_mot_lan",
+                      {"muc_huong": round(bq * thang), "so_thang": thang}, src, as_of,
+                      "bhxh_he_so/muc_huong")
+
+
 def _progressive(taxable: float, brackets: list) -> float:
     """Thuế luỹ tiến từng phần. brackets=[[upper, rate],…] tăng dần; upper=None=∞."""
     tax = 0.0
