@@ -14,6 +14,11 @@ fresh-deploy/CI fail. Baseline này dựng toàn schema một lần, đúng th�
 
 DB đang chạy (đã ở 0013) → `alembic stamp 0001_baseline` (không chạy lại, giữ data).
 
+⚠️ Convention: baseline `create_all` phản ánh MODEL HIỆN TẠI → DB rỗng luôn có schema
+mới nhất. Vì vậy MỌI migration delta sau baseline PHẢI idempotent (`ADD COLUMN IF NOT
+EXISTS`…) để no-op trên DB mới, chỉ thực-áp trên DB đã deploy ở baseline cũ. (Hoặc:
+định kỳ "freeze" baseline mới.)
+
 Revision ID: 0001_baseline
 Revises:
 """

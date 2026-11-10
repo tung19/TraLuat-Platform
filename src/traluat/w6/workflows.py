@@ -120,6 +120,7 @@ class JudgmentFinding:
     flagged: bool
     reason: str              # "" nếu không cờ
     missing_binding: list[str]   # eid điều ràng buộc đúng tình huống mà bản án KHÔNG áp
+    missing_precedents: list[str] = field(default_factory=list)  # CN-04: án lệ ràng buộc bỏ sót
 
 
 class JudgmentAnalysisService:
@@ -132,8 +133,9 @@ class JudgmentAnalysisService:
         self.s = session
 
     def analyze(self, cited_eids: list[str], expected_governing: list[str],
-                as_of: dt.date) -> JudgmentFinding:
+                as_of: dt.date, *, cited_precedents: list[str] | None = None) -> JudgmentFinding:
         from ..w2.bitemporal import EffectStatus
+        from ..w4.precedent_store import binding_precedents
         cited = set(cited_eids)
         missing = []
         for eid in expected_governing:
@@ -143,7 +145,19 @@ class JudgmentAnalysisService:
             if repo.effect_status(self.s, eid, as_of) in (
                     EffectStatus.IN_FORCE, EffectStatus.TRANSITIONAL_APPLIES):
                 missing.append(eid)
-        if missing:
+
+        # CN-04: án lệ RÀNG BUỘC (công bố, effective@ngày xử) áp vào tình huống mà
+        # bản án không viện → cờ (án lệ công bố ràng buộc thực tế, NQ 04/2019).
+        cited_al = set(cited_precedents or [])
+        binding = binding_precedents(self.s, expected_governing, as_of)
+        missing_al = [p.precedent_id for p in binding if p.precedent_id not in cited_al]
+
+        if missing or missing_al:
+            why = []
+            if missing:
+                why.append("điều còn hiệu lực đúng tình huống")
+            if missing_al:
+                why.append("án lệ ràng buộc (NQ 04/2019)")
             return JudgmentFinding(
-                True, "bản án không viện dẫn điều còn hiệu lực đúng tình huống", missing)
-        return JudgmentFinding(False, "", [])
+                True, "bản án không viện dẫn " + " + ".join(why), missing, missing_al)
+        return JudgmentFinding(False, "", [], [])

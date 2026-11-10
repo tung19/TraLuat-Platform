@@ -54,3 +54,33 @@ def test_precedent_matched_and_pruned(session: Session):
     pids = {p.precedent_id for p in adj.verified_precedents}
     assert "AL01" in pids          # tựa Điều còn hiệu lực → giữ
     assert "AL03" not in pids      # tựa Điều hết hiệu lực (bị Auditor loại) → prune
+
+
+def test_binding_precedents_effectivity(session: Session):
+    # CN-04: án lệ chỉ RÀNG BUỘC từ effective_from; trước đó không áp
+    from traluat.w4.precedent_store import add_precedent, binding_precedents
+    add_precedent(session, "AL-10/2020", ["nd99__dieu_3"],
+                  effective_from=D(2020, 6, 1))
+    add_precedent(session, "AL-null", ["nd99__dieu_3"])      # NULL → luôn áp
+
+    before = {p.precedent_id for p in binding_precedents(session, ["nd99__dieu_3"], D(2020, 1, 1))}
+    after = {p.precedent_id for p in binding_precedents(session, ["nd99__dieu_3"], D(2021, 1, 1))}
+    assert "AL-10/2020" not in before and "AL-null" in before      # chưa hiệu lực
+    assert "AL-10/2020" in after and "AL-null" in after            # đã ràng buộc
+    # không tựa eid trong tình huống → không áp
+    assert binding_precedents(session, ["nd99__dieu_1"], D(2021, 1, 1)) == []
+
+
+def test_judgment_flags_missing_binding_precedent(session: Session):
+    from traluat.w4.precedent_store import add_precedent
+    from traluat.w6 import JudgmentAnalysisService
+    add_precedent(session, "AL-01/2016/AL", ["nd99__dieu_3"], effective_from=D(2016, 1, 1))
+    # bản án viện điều nhưng BỎ án lệ ràng buộc → cờ (CN-04)
+    f = JudgmentAnalysisService(session).analyze(
+        ["nd99__dieu_3"], ["nd99__dieu_3"], D(2022, 1, 1))
+    assert f.flagged and "AL-01/2016/AL" in f.missing_precedents
+    # nếu viện cả án lệ → không cờ
+    f2 = JudgmentAnalysisService(session).analyze(
+        ["nd99__dieu_3"], ["nd99__dieu_3"], D(2022, 1, 1),
+        cited_precedents=["AL-01/2016/AL"])
+    assert not f2.flagged

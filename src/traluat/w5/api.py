@@ -102,6 +102,7 @@ class JudgmentRequest(BaseModel):      # FR-03 second-opinion (CN-03 high-risk)
     cited_eids: list[str]
     expected_governing: list[str]
     as_of: str
+    cited_precedents: list[str] | None = None   # CN-04: án lệ bản án đã viện
 
 
 _REQUIRED = object()
@@ -659,11 +660,13 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
                               destination="none", resource="judgment")
         from ..w6 import JudgmentAnalysisService
         f = JudgmentAnalysisService(svc.s).analyze(
-            body.cited_eids, body.expected_governing, parse_date(body.as_of))
+            body.cited_eids, body.expected_governing, parse_date(body.as_of),
+            cited_precedents=body.cited_precedents)
         svc.audit.confirm(intent, "done")
         return {"flagged": f.flagged, "reason": f.reason,
-                "missing_binding": f.missing_binding, "ai_label": True,
-                "trace_id": tid,
+                "missing_binding": f.missing_binding,
+                "missing_precedents": f.missing_precedents,   # CN-04 án lệ ràng buộc
+                "ai_label": True, "trace_id": tid,
                 "hitl_required": True}            # CN-03: con người quyết định cuối
 
     return app

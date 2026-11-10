@@ -129,7 +129,7 @@
 | **CN-01** | Data residency VN + egress fail-closed (NĐ 356/2025) | W5 §3.1 / §3.1b | ✅ **DONE** |
 | **CN-02** | Nhãn AI (Luật 71/2025, NĐ 142/2026) | W5 §3.4 | ✅ **DONE** |
 | **CN-03** | Judgment/điều-tra/kiểm-sát = rủi-ro-cao: HITL + logging (QĐ 33/2026) | compliance-vn | ✅ **DONE** (judgment/draft audit + hitl_required) |
-| **CN-04** | Án lệ **ràng buộc** (NQ 04/2019) | W2 §5.2 | 🟡 **WIP** — `precedent_store` + prune có; rule ràng-buộc riêng chưa |
+| **CN-04** | Án lệ **ràng buộc** (NQ 04/2019) | W2 §5.2 | ✅ **DONE** — `binding_precedents` (effective@T) + judgment cờ án-lệ-ràng-buộc bỏ sót |
 | **CN-05** | Nguồn được phép + bản án ẩn danh (NQ 03/2017) | W1 + data-handoff | ✅ **DONE** — license-gate + `w1/anonymize` áp khi ingest bản án |
 | **CN-06** | Mã hoá key-per-tenant + zero-retention (tuỳ tenant) | W5 §2.4 / §3.2 | ✅ **DONE** |
 
@@ -153,7 +153,7 @@
 - ❌ **SPEC chưa code (1)**: FR-08 ComplianceAdvisory
 - 🔵 **DEFER theo spec (3+1)**: FR-31,32,33 + FR-04-ZH
 - **FR-35.x**: **14/14 DONE** (công thức+lịch tính đúng; lookup cần data thật)
-- **CN**: 5/6 DONE (01,02,03,05,06) · CN-04 WIP
+- **CN**: **6/6 DONE**
 
 **Chặn bởi NGOÀI (không code thêm được)**: vLLM/GPU · API key Claude · data thật (thuế/lương/phạt/toạ độ/template/gold) · authority_rank 2025 · meta.json thật · Paddle/boto3/hvac.
 

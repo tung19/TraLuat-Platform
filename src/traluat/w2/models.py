@@ -174,6 +174,8 @@ class PrecedentRow(Base):
     cited_eids: Mapped[list] = mapped_column(JSONB)           # list eid điều tựa vào
     situation: Mapped[str | None]
     solution: Mapped[str | None]
+    effective_from: Mapped[dt.date | None]                   # CN-04: ngày án lệ RÀNG BUỘC
+                                                             # (NQ 04/2019 Đ8: sau 30 ngày công bố)
 
 
 class ReferenceValue(Base):
