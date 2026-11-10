@@ -85,7 +85,10 @@ Phase 5  Diện rộng + Portability      ──►  nuốt thị trường + n�
 - **Gold set effectivity/omission/conflict** → `GoldCase` vào `run_eval`, bật CI gate.
 - **primary-text** → điền số `authority_rank` 2025 trong `legal_rule_base` (gỡ provisional).
 
-**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search repair · as_of_map đa-mốc/lex-mitior (§1b) · conflict DETECTION (FR-41, model+gold) · W4 reasoning · W5/W6 platform.
+**W4 — Reasoning engine (slice-1: Auditor HARD-GATE) — XONG moat.**
+- `auditor.audit`: cổng TIỀN-output 3 tầng — (1) trích dẫn có thật · (3) ngày hiệu lực (cắm `repo.citable_text`; TRANSITIONAL giữ+đánh dấu, H3 version-match; rớt → KHÔNG tốn lời gọi) · (2) **element-wise** (áp dụng ⇔ MỌI yếu tố thoả, không holistic) · `prune_unsupported` (án lệ mất điểm tựa → bỏ). `ElementJudge` port + stub. `audit_trail` giữ mọi điều + lý do loại.
+
+**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search · conflict DETECTION (FR-41, model+gold) · W4 Researcher→Adjudicator per-party + Reasoner đa vai LangGraph · W5/W6 platform.
 
 ---
 
