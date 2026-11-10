@@ -76,11 +76,15 @@ class IngestOutcome:
 
 def ingest_source(
     session, source: DocumentSource, *, since: dt.date | None = None, ocr=None,
+    anonymize_judgments: bool = True,
 ) -> IngestOutcome:
     """Nạp cả mẻ từ nguồn → W2. Lỗi 1 văn bản không chặn mẻ (ghi vào failed).
 
     ocr = OCREngine (w1.ocr): văn bản chỉ có `image_ref` (text rỗng) → OCR trước.
-    Thiếu ocr mà rỗng text → văn bản đó vào `failed` (không nạp bừa)."""
+    Thiếu ocr mà rỗng text → văn bản đó vào `failed` (không nạp bừa).
+    anonymize_judgments (CN-05/NQ 03/2017): doc-type bản-án/án-lệ → ẩn danh PII TRƯỚC
+    khi lưu (tên→viết tắt, CMND/CCCD/SĐT/email che). KB QPPL (Luật/NĐ) không áp."""
+    from .anonymize import anonymize, is_judgment_type
     out = IngestOutcome()
     for raw in source.fetch(since):
         try:
@@ -89,6 +93,8 @@ def ingest_source(
                 if ocr is None:
                     raise ValueError("văn bản chỉ có ảnh nhưng chưa cấu hình OCR")
                 text = ocr.extract(raw.image_ref, raw.lang)
+            if anonymize_judgments and is_judgment_type(raw.doc_type):
+                text, _ = anonymize(text)              # CN-05: che PII bản án
             doc, _ = ingest_document(
                 session, text, raw.doc_slug, frbr_uri=raw.frbr_uri,
                 doc_type=raw.doc_type, date_effective=raw.date_effective,
