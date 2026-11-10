@@ -124,19 +124,28 @@ class ReasoningEngine:
                 top_k=top_k)
             return mr.run(case, as_of, tenant_id=tenant_id, case_id=case_id, lang=lang).adjudication
 
+        from .precedent_store import match_by_eids
+
         parties = case.parties or ["(chung)"]
-        results, all_verified, trail = [], [], []
+        results, all_verified, all_prec, trail = [], [], [], []
+        seen_prec: set[str] = set()
         for party in parties:
             facts = case.facts_by_party.get(party, case.facts)
             articles, chunk_by_eid = self._research(facts, as_of, lang, top_k)
-            audit = self.auditor.audit(facts, as_of, articles, lang=lang)
+            # Researcher: án lệ tựa vào điều ứng viên (Auditor sẽ prune theo verified)
+            cand_prec = match_by_eids(self.s, [a.unit_eid for a in articles])
+            audit = self.auditor.audit(facts, as_of, articles, cand_prec, lang=lang)
             trail.extend(audit.trail)
             all_verified.extend(audit.verified_articles)
+            for p in audit.verified_precedents:        # dedupe xuyên bên
+                if p.precedent_id not in seen_prec:
+                    seen_prec.add(p.precedent_id)
+                    all_prec.append(p)
             results.append(self._adjudicate(
                 party, facts, as_of, audit.verified_articles, chunk_by_eid, lang, tenant_id))
 
         draft = "\n\n".join(f"[{r.party}] {r.relief}" for r in results if r.relief)
         return Adjudication(
-            parties=results, verified_articles=all_verified, verified_precedents=[],
+            parties=results, verified_articles=all_verified, verified_precedents=all_prec,
             audit_trail=trail, draft=draft, ai_label=True,
         )

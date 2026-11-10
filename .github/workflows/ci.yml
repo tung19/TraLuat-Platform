@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: traluat
+          POSTGRES_PASSWORD: traluat
+          POSTGRES_DB: traluat
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U traluat -d traluat"
+          --health-interval 3s --health-timeout 3s --health-retries 30
+    env:
+      # trỏ DB về service (port 5432); model extra KHÔNG cài → test model tự skip.
+      DATABASE_URL: postgresql+psycopg://traluat:traluat@localhost:5432/traluat
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync deps (core + dev, không model)
+        run: uv sync
+      - name: Migrate (tạo schema + RLS + role)
+        run: uv run alembic upgrade head
+      - name: Test — PG chạy, model tự skip (eval-gate smoke nằm trong đây)
+        run: uv run python -m pytest tests/ -q
+      - name: Lint (không chặn)
+        run: uv run ruff check src tests || true

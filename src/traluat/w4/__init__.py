@@ -18,6 +18,7 @@ from .checkpoint import (
     Checkpointer, CrossTenantCheckpoint, DebateCheckpoint,
     InMemoryCheckpointer, PostgresCheckpointer,
 )
+from .precedent_store import add_precedent, match_by_eids
 
 __all__ = [
     "Article", "Precedent", "AuditEntry", "AuditResult",
@@ -26,4 +27,5 @@ __all__ = [
     "MultiRoleReasoner", "RoleConfig", "Utterance", "DebateResult",
     "Checkpointer", "InMemoryCheckpointer", "PostgresCheckpointer",
     "DebateCheckpoint", "CrossTenantCheckpoint",
+    "add_precedent", "match_by_eids",
 ]

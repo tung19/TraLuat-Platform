@@ -151,6 +151,18 @@ class Chunk(Base):
     )
 
 
+class PrecedentRow(Base):
+    """Án lệ / bản án tham chiếu (W4 §2). cited_eids = điều mà án lệ tựa vào →
+    prune_unsupported bỏ án lệ mất hết điểm tựa. NQ 04/2019: án lệ công bố RÀNG
+    BUỘC THỰC TẾ (không under-weight)."""
+    __tablename__ = "precedent"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    precedent_id: Mapped[str] = mapped_column(unique=True)    # vd 'AL 01/2016/AL'
+    cited_eids: Mapped[list] = mapped_column(JSONB)           # list eid điều tựa vào
+    situation: Mapped[str | None]
+    solution: Mapped[str | None]
+
+
 class ReferenceValue(Base):
     """Reference-data (luồng 3) — bảng tra cứu RULE, HIỆU-LỰC-AWARE (moat: calculator
     CÓ-NGUỒN-LUẬT). Dataset nào suy-từ-luật BẮT BUỘC mang valid_from/to + source_eid.
