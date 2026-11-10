@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import datetime as dt
 
-from ..w2.models import Document, Unit, UnitVersion
+import sqlalchemy as sa
+
+from ..w2.models import Document, NormRelation, Unit, UnitVersion
+from .relations import RelationCandidate, extract_relations
 from .structure import ParsedUnit, parse_structure
 
 
@@ -52,3 +55,69 @@ def load_to_w2(
             ))
     session.flush()
     return doc
+
+
+def _resolve_dst_unit(session, dst_doc_id: int, dieu: int) -> int | None:
+    """Điều N của VB đích → unit.id (unit_type='dieu', ordinal=N)."""
+    return session.scalar(
+        sa.select(Unit.id).where(
+            Unit.document_id == dst_doc_id, Unit.unit_type == "dieu", Unit.ordinal == dieu,
+        )
+    )
+
+
+def load_relations_to_w2(
+    session,
+    *,
+    src_frbr_uri: str,
+    candidates: list[RelationCandidate],
+    default_effective_date: dt.date | None = None,
+) -> tuple[list[NormRelation], list[RelationCandidate]]:
+    """Nạp RelationCandidate → norm_relation (review_status='needs_review').
+
+    Trả (đã tạo, chưa giải được). KHÔNG materialize — chỉ xếp vào hàng đợi duyệt;
+    materialize gate (W2) mới chạm kho bitemporal. VB đích chưa có trong kho →
+    'chưa giải được' (không bịa FK), chờ VB kia ingest rồi chạy lại.
+    """
+    src = session.scalar(sa.select(Document).where(Document.frbr_uri == src_frbr_uri))
+    if src is None:
+        raise ValueError(f"src_frbr_uri không có trong kho: {src_frbr_uri}")
+
+    created: list[NormRelation] = []
+    unresolved: list[RelationCandidate] = []
+    seen: set[tuple] = set()
+    for c in candidates:
+        dst = session.scalar(
+            sa.select(Document).where(Document.doc_number == c.dst_doc_number)
+        )
+        if dst is None:
+            unresolved.append(c)  # VB đích chưa ingest — chờ, không bịa
+            continue
+        dst_unit_id = _resolve_dst_unit(session, dst.id, c.dst_dieu) if c.dst_dieu else None
+        eff = c.effective_date or default_effective_date
+        key = (src.id, dst.id, dst_unit_id, c.relation_type, eff)
+        if key in seen:  # chống nhân đôi trong cùng mẻ (DB còn nr_dedupe)
+            continue
+        seen.add(key)
+        rel = NormRelation(
+            relation_type=c.relation_type, effective_date=eff,
+            src_doc_id=src.id, src_unit_id=None,
+            dst_doc_id=dst.id, dst_unit_id=dst_unit_id,
+            confidence=c.confidence, confidence_basis=c.confidence_basis,
+            review_status="needs_review", evidence_span=c.evidence_span,
+        )
+        session.add(rel)
+        created.append(rel)
+    session.flush()
+    return created, unresolved
+
+
+def extract_and_load_relations(
+    session, *, src_frbr_uri: str, text: str, default_effective_date: dt.date | None = None,
+) -> tuple[list[NormRelation], list[RelationCandidate]]:
+    """Tiện ích: trích cue-phrase từ `text` rồi nạp vào hàng đợi duyệt."""
+    cands = extract_relations(text)
+    return load_relations_to_w2(
+        session, src_frbr_uri=src_frbr_uri, candidates=cands,
+        default_effective_date=default_effective_date,
+    )
