@@ -56,6 +56,8 @@ class DirectoryQuarantined(ValueError):
 class NearbyHit:
     entry: Directory
     distance_m: float
+    lat: float | None = None       # ST_Y(geom) — tiện render bản đồ
+    lon: float | None = None       # ST_X(geom)
 
 
 def add_directory_entry(
@@ -90,14 +92,17 @@ def nearby(
     geog = _Geography()
     # ::geography → khoảng cách tính bằng MÉT (không phải độ)
     dist = sa.func.ST_Distance(sa.cast(Directory.geom, geog), sa.cast(pt, geog))
-    q = (sa.select(Directory, dist.label("d"))
+    q = (sa.select(Directory, dist.label("d"),
+                   sa.func.ST_Y(Directory.geom).label("lat"),
+                   sa.func.ST_X(Directory.geom).label("lon"))
          .where(Directory.geom.isnot(None))
          .where(sa.func.ST_DWithin(
              sa.cast(Directory.geom, geog), sa.cast(pt, geog), radius_m))
          .order_by(dist).limit(limit))
     if kind is not None:
         q = q.where(Directory.kind == kind)
-    return [NearbyHit(entry=row, distance_m=float(d)) for row, d in session.execute(q)]
+    return [NearbyHit(entry=row, distance_m=float(d), lat=float(y), lon=float(x))
+            for row, d, y, x in session.execute(q)]
 
 
 def _Geography():

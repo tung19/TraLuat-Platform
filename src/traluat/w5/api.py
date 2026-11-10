@@ -32,7 +32,7 @@ body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0
 .abstain{color:#b91c1c;font-weight:600}.ai{font-size:.75rem;color:#64748b}
 textarea,input{font:inherit}</style></head>
 <body><h1>TraLuat — trợ lý pháp lý</h1>
-<p><a href="/graph">→ Đồ thị quy phạm (FR-37)</a> · <a href="/review">→ Rà soát hợp đồng</a></p>
+<p><a href="/graph">→ Đồ thị quy phạm (FR-37)</a> · <a href="/review">→ Rà soát hợp đồng</a> · <a href="/directory">→ Danh bạ geo (FR-39)</a></p>
 <p>Nhập tình tiết + <b>ngày sự kiện</b> (không phải ngày hỏi). Kết quả có
 <b>trích dẫn điều–khoản tại ngày T</b> kèm trạng thái hiệu lực, hoặc
 <b>abstain</b> khi không đủ căn cứ. Mọi output gắn nhãn AI (Luật 71/2025).</p>
@@ -160,6 +160,77 @@ async function load(){const d=await fetchGraph(eid.value);if(!d)return;
 #flt input{margin-right:.2rem}</style></body></html>"""
 
 
+_DIRECTORY_HTML = """<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<title>TraLuat — Danh bạ (FR-39)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+body{font-family:system-ui,sans-serif;margin:0}
+#bar{padding:.6rem 1rem;border-bottom:1px solid #e2e8f0;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+#wrap{display:flex;height:calc(100vh - 56px)}
+#map{flex:1}#side{width:320px;overflow:auto;border-left:1px solid #e2e8f0;padding:.5rem .8rem}
+input,select{font:inherit;padding:.2rem .4rem}
+.item{padding:.4rem .2rem;border-bottom:1px solid #f1f5f9;cursor:pointer}
+.item:hover{background:#f8fafc}.k{font-size:.7rem;color:#fff;padding:.05rem .35rem;border-radius:.3rem}
+.d{color:#2563eb;font-weight:600}small{color:#64748b}
+</style></head><body>
+<div id="bar">
+<b>TraLuat · danh bạ geo</b>
+<small>bấm bản đồ để chọn toạ độ</small>
+Loại: <select id="kind"><option value="">tất cả</option>
+<option value="toa_an">toà án</option><option value="cong_chung">công chứng</option>
+<option value="vien_ksnd">VKS</option><option value="thi_hanh_an">thi hành án</option>
+<option value="co_quan">cơ quan</option></select>
+Bán kính: <input id="rad" type="range" min="1" max="50" value="5"><span id="radv">5</span> km
+Token: <input id="tok" size="18" placeholder="Bearer JWT">
+</div>
+<div id="wrap"><div id="map"></div>
+<div id="side"><p><small>Chọn một điểm trên bản đồ…</small></p></div></div>
+<script>
+const COL={toa_an:'#16a34a',cong_chung:'#2563eb',vien_ksnd:'#b91c1c',thi_hanh_an:'#ca8a04',co_quan:'#64748b'};
+const map=L.map('map').setView([10.7769,106.7009],12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+let pick=null, hitLayer=L.layerGroup().addTo(map);
+const rad=document.getElementById('rad'), radv=document.getElementById('radv');
+rad.oninput=()=>{radv.textContent=rad.value; if(pick) query();};
+document.getElementById('kind').onchange=()=>{if(pick)query();};
+map.on('click',e=>{setPick(e.latlng.lat,e.latlng.lng);query();});
+function setPick(lat,lon){
+  if(pick)map.removeLayer(pick);
+  pick=L.marker([lat,lon]).addTo(map).bindPopup('điểm chọn').openPopup();
+}
+async function query(){
+  const kind=document.getElementById('kind').value;
+  const q=new URLSearchParams({lat:pick.getLatLng().lat,lon:pick.getLatLng().lng,
+    radius_m:rad.value*1000}); if(kind)q.set('kind',kind);
+  const side=document.getElementById('side');
+  const r=await fetch('/directory/nearby?'+q,{headers:{'Authorization':'Bearer '+document.getElementById('tok').value}});
+  if(!r.ok){side.innerHTML='<p class=d>Lỗi '+r.status+'</p>';return;}
+  const list=await r.json(); hitLayer.clearLayers();
+  if(!list.length){side.innerHTML='<p><small>Không có cơ quan trong bán kính.</small></p>';return;}
+  side.innerHTML='<p><b>'+list.length+'</b> kết quả trong '+rad.value+' km</p>';
+  const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  list.forEach(x=>{
+    const c=COL[x.kind]||'#64748b', km=(x.distance_m/1000).toFixed(2);
+    if(x.lat!=null&&x.lon!=null){
+      L.circleMarker([x.lat,x.lon],{radius:7,color:c,fillColor:c,fillOpacity:.85,weight:1})
+        .bindPopup('<b>'+esc(x.name)+'</b><br>'+km+' km')
+        .addTo(hitLayer);
+    }
+    const el=document.createElement('div'); el.className='item';
+    el.innerHTML='<span class=k style="background:'+c+'">'+x.kind+'</span> '
+      +'<span class=d>'+km+' km</span><br>'
+      +'<b>'+esc(x.name)+'</b><br><small>'+esc(x.address||'')
+      +(x.phone?(' · ☎ '+esc(x.phone)):'')+'</small>';
+    if(x.lat!=null&&x.lon!=null) el.onclick=()=>map.setView([x.lat,x.lon],15);
+    side.appendChild(el);
+  });
+}
+</script></body></html>"""
+
+
 _REVIEW_HTML = """<!doctype html><html lang="vi"><head><meta charset="utf-8">
 <title>TraLuat — Rà soát</title><style>
 body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem}
@@ -220,6 +291,10 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     def metrics_ep():                  # observability — scrape Prometheus
         return app.state.metrics.render()
 
+    @app.get("/directory", response_class=HTMLResponse)
+    def directory_page():              # FR-39 — bản đồ bấm chọn toạ độ → danh bạ gần
+        return _DIRECTORY_HTML
+
     @app.get("/graph", response_class=HTMLResponse)
     def graph_view():                  # FR-37 — vẽ đồ thị quan hệ quy phạm (Cytoscape)
         return _GRAPH_HTML
@@ -270,6 +345,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         hits = nearby(svc.s, lat, lon, radius_m, kind=kind)
         return [{"id": h.entry.id, "kind": h.entry.kind, "name": h.entry.name,
                  "address": h.entry.address, "phone": h.entry.phone,
+                 "lat": h.lat, "lon": h.lon,
                  "distance_m": round(h.distance_m, 1)} for h in hits]
 
     @app.post("/alerts/subscribe")
