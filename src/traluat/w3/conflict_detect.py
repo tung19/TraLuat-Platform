@@ -125,11 +125,16 @@ def _explicit_conflicts(session: Session, scope_frbr_uris: list[str]) -> list[Co
 def find_and_resolve_conflicts(
     session: Session, scope_frbr_uris: list[str], as_of: dt.date, *,
     min_topic_overlap: int = 2, question_type: str = "general", lang: str = "vi",
+    pack=None,
 ) -> list[ConflictFinding]:
-    """Phát hiện → giải (lex superior/posterior/abstain). KHÔNG auto khi mơ hồ (#6)."""
+    """Phát hiện → giải (lex superior/posterior/abstain). KHÔNG auto khi mơ hồ (#6).
+
+    pack = JurisdictionPack (W6) → bơm thang bậc theo vùng tài phán; None = VN mặc định."""
+    rank_fn = pack.rank_of if pack is not None else None
     findings = []
     for c in detect_conflicts(session, scope_frbr_uris, as_of,
                               min_topic_overlap=min_topic_overlap, lang=lang):
-        res = repo.resolve_conflict(session, [c.eid_a, c.eid_b], as_of, question_type)
+        res = repo.resolve_conflict(session, [c.eid_a, c.eid_b], as_of,
+                                    question_type, rank_fn=rank_fn)
         findings.append(ConflictFinding(c, res))
     return findings

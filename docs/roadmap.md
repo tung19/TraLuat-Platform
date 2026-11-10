@@ -96,7 +96,10 @@ Phase 5  Diện rộng + Portability      ──►  nuốt thị trường + n�
 **FR-41 — Conflict DETECTION (slice-1 tất định) — XONG finding type thứ 3.**
 - `conflict_detect.detect_conflicts`: phát hiện cặp điều xuyên-văn-bản cùng chủ đề nhưng **lệch đại lượng số** (vd thời hạn 30 vs 15 ngày) + quan hệ `conflicts` đã-flag. `find_and_resolve_conflicts` nối thẳng W2 `resolve_conflict` (lex superior/posterior/abstain). "Luật nói A, Thông tư nói B → Luật thắng" chạy được. Defer: mâu thuẫn ngữ nghĩa (A cho phép/B cấm, không số) qua SemanticConflictDetector port (ML).
 
-**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search · conflict ngữ-nghĩa (NLI, FR-41 phần ML) · W5 infra-lift (FastAPI/Celery/RLS `FORCE ROW LEVEL SECURITY`/KMS) · W6 platform/JurisdictionPack/workflow UI · durable checkpointer Postgres cho đa vai (resume).
+**W5 FastAPI infra-lift — XONG.** `api.create_app` (POST /analyze, /health) · JWT→TenantContext (thiếu tenant→401) · RBAC require_role (viewer→403) · `rls.py` (C2: ENABLE+FORCE RLS + policy, `set_tenant` SQLi-safe) sẵn áp cho bảng khách. Celery/SSE/nginx cắm quanh sau.
+**W6 JurisdictionPack — XONG slice-1 (portability).** `JurisdictionPack` (rank_table · roles · ambiguous_types) + registry + `load_pack` (JSON). `resolve_conflict(rank_fn=...)` + `find_and_resolve_conflicts(pack=...)` bơm thang bậc theo vùng → winner xung đột đổi theo pack, **engine không đổi** (mở đường nước thứ 2).
+
+**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search · conflict ngữ-nghĩa (NLI) · durable checkpointer Postgres cho đa vai (resume) · eval gold set (chuyên gia label) · W5 Celery/SSE + migration tenant tables · W6 workflow UI/frontend.
 
 ---
 

@@ -348,13 +348,18 @@ class ConflictResult:
 
 def resolve_conflict(
     s: Session, eids: list[str], as_of: dt.date, question_type: str = "general",
+    *, rank_fn=None,
 ) -> ConflictResult:
     """Giải tập điều ĐÃ-được-flag là chọi nhau. KHÔNG tự phát hiện (đó là FR-41).
 
     ① Cổng hiệu lực (effect_status@as_of): hết hiệu lực → cite nhưng KHÔNG tranh thắng.
     ② lex superior (authority_rank@as_of, rule base) → ③ lex posterior (cùng rank, mới hơn)
     → ④ hoà / rank mơ hồ / không-in-force → ABSTAIN→human.
+
+    rank_fn(doc_type, as_of)→int|None: bơm thang bậc theo vùng tài phán (W6
+    JurisdictionPack — portability nước thứ 2). Mặc định = legal_rule_base VN.
     """
+    rank_fn = rank_fn or lrb.rank_of
     items = []
     for eid in eids:
         row = s.execute(
@@ -366,7 +371,7 @@ def resolve_conflict(
         st = effect_status(s, eid, as_of)
         items.append({
             "eid": eid, "doc_type": row.doc_type, "date_effective": row.date_effective,
-            "status": st, "rank": lrb.rank_of(row.doc_type, as_of),
+            "status": st, "rank": rank_fn(row.doc_type, as_of),
         })
 
     # ① cổng hiệu lực
