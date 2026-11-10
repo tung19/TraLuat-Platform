@@ -27,6 +27,9 @@ models = [
     "transformers>=5.22.2",
     "vietocr>=0.3.12",
 ]
+graph = [
+    "neo4j>=5",
+]
 
 [dependency-groups]
 dev = [

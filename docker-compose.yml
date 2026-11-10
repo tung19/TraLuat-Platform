@@ -67,6 +67,14 @@ services:
     container_name: traluat-grafana
     profiles: ["obs"]
     ports: ["3000:3000"]
+  # Neo4j projection (ADR-0001 option c) — đồ thị phái sinh từ norm_relation.
+  neo4j:
+    image: neo4j:5
+    container_name: traluat-neo4j
+    profiles: ["graph"]
+    environment:
+      NEO4J_AUTH: neo4j/traluat-neo4j-pw
+    ports: ["7474:7474", "7687:7687"]
 
 volumes:
   traluat_pgdata:
