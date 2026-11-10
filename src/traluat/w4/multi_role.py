@@ -19,9 +19,11 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
+from ..w2 import repo
 from ..w3.ports import LLMGateway, NLIVerifier
 from .auditor import ElementJudge
 from .reasoner import Adjudication, CaseInput, ReasoningEngine
+from .types import Article
 
 
 @dataclass
@@ -72,18 +74,37 @@ class MultiRoleReasoner:
         self.max_rounds = max_rounds
         self.top_k = top_k
 
+    def _article_from_w2(self, eid: str, as_of: dt.date, lang: str) -> Article | None:
+        text = repo.reconstruct_as_of(self.engine.s, eid, as_of, lang)
+        if text is None:
+            return None
+        return Article(unit_eid=eid, version_date=as_of, text=text,
+                       elements=self.engine.elements_by_eid.get(eid, []))
+
     def run(
         self, case: CaseInput, as_of: dt.date, *,
         tenant_id: str | None = None, case_id: str = "case", lang: str = "vi",
+        checkpointer=None,
     ) -> DebateResult:
         # thread_id từ tenant+case (KHÔNG timestamp — truy vết + chống va chạm)
-        thread_id = f"tenant:{tenant_id or 'none'}:{case_id}"
+        tkey = tenant_id or "none"
+        thread_id = f"tenant:{tkey}:{case_id}"
         memo: dict[str, object | None] = {}       # H4: (eid) → Article | None (audit 1 lần/vụ)
         pool: dict[str, object] = {}              # verified tích luỹ
         chunk_all: dict[str, object] = {}
         transcript: list[Utterance] = []
         converged = False
         rnd = 0
+
+        # RESUME: nạp pool đã verify từ checkpoint → KHÔNG audit lại (H4 persist)
+        if checkpointer is not None:
+            ck = checkpointer.load(thread_id, tkey)
+            if ck:
+                for eid in ck.get("pool_eids", []):
+                    art = self._article_from_w2(eid, as_of, lang)
+                    if art is not None:
+                        memo[eid] = art
+                        pool[eid] = art
 
         for rnd in range(1, self.max_rounds + 1):
             added = False
@@ -110,6 +131,9 @@ class MultiRoleReasoner:
                         added = True
                 transcript.append(Utterance(role.name, rnd, proposed, verified_eids, struck))
 
+            if checkpointer is not None:      # durable: lưu sau mỗi lượt (crash-safe)
+                checkpointer.save(thread_id, tkey,
+                                  {"round": rnd, "pool_eids": list(pool), "converged": not added})
             if not added:                 # hội tụ: trọn lượt không thêm căn cứ verified
                 converged = True
                 break
