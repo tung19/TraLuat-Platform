@@ -93,7 +93,7 @@
 | **FR-35** | **Legal utilities toolbox** — **14 mục, bảng chi tiết FR-35.x bên dưới** (35.13 là ⚡moat-item) | tiện ích TVPL | parity trên W2/W3 (+ 35.13 moat) | 🟡 **WIP** | registry `w1/calculators` chạy; **14/14 mục xong** (toàn bộ). |
 | **FR-36** | **Document compare (as-of)** — so 2 phiên bản / **2 ngày BẤT KỲ** của cùng VB, redline cấp điều–khoản | "so sánh văn bản" | **powered by FR-01** | ✅ **DONE** | `ComplianceDiffService.diff` + `/compare` + form `/tools`. |
 | **FR-37** | **Effectivity-aware relationship graph** — viz "gia phả" VB có **trục thời gian** (query in-force@T) | "lược đồ" | **powered by FR-13** | ✅ **DONE** | `/graph` Cytoscape time-travel + GDS overlay. |
-| **FR-38** | **Forms / biểu mẫu library** — kho mẫu tải được | "biểu mẫu" | nối FR-34 | 🟡 **WIP** | template store có; form có cấu trúc + validation chưa. |
+| **FR-38** | **Forms / biểu mẫu library** — kho mẫu tải được | "biểu mẫu" | nối FR-34 | ✅ **DONE** | `w1/forms` (field type/required/pattern/choice + validate) + `fill_template` (deterministic, không LLM). |
 | **FR-39** | **Directory VPLS + bản đồ "gần bạn"** | DanLuat (không geo) | **PostGIS** + reference-data-plane | ✅ **DONE** | `w1/directory` PostGIS `nearby` + `/directory` Leaflet + seed 13 cơ quan. 🔵 data-freshness thật cần đội data. |
 | **FR-40** | **Danh bạ liên hệ công khai** (cán bộ khu vực…) | — | Postgres + reference-data-plane | ✅ **DONE** | cùng bảng `directory` (kind co_quan/vien_ksnd/thi_hanh_an). |
 
@@ -149,7 +149,7 @@
 
 **41 FR chính + 14 mục FR-35.x + 6 CN:**
 - ✅ **DONE (26 FR)**: FR-01,02,03,05,06,07,09,10,11,12,13,16,17,19,21,22,23,24,25,26,27,28,29,30,34,36,37,39,40 *(≈29 incl. tiện ích)*
-- 🟡 **WIP (4)**: FR-04 (EN xong/ZH defer) · FR-15 (draft generic) · FR-18 (UI VI-only) · FR-20 (thiếu đo scan)
+- 🟡 **WIP (3)**: FR-04 (EN xong/ZH defer) · FR-15 (draft generic) · FR-18 (UI VI-only) · FR-20 (thiếu đo scan)
 - ❌ **SPEC chưa code (1)**: FR-08 ComplianceAdvisory
 - 🔵 **DEFER theo spec (3+1)**: FR-31,32,33 + FR-04-ZH
 - **FR-35.x**: **14/14 DONE** (công thức+lịch tính đúng; lookup cần data thật)

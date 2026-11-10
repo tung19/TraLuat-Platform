@@ -58,3 +58,22 @@ def test_draft_abstains_without_template(session: Session):
     svc = PetitionDraftService(session, gateway=EchoLLMGateway())
     r = svc.draft("khong_co_mau", "x", D(2022, 1, 1))
     assert r.abstain and r.reason == "no_template"
+
+
+def test_fill_template_form_validates_and_fills(session: Session):
+    # FR-38: biểu mẫu có cấu trúc + validation qua template store
+    from traluat.w1.templates import fill_template
+    add_template(session, "don_xin_phep",
+                 "Đơn xin phép", "Tôi {ho_ten}, nộp ngày {ngay}.",
+                 slots=[{"name": "ho_ten", "label": "Họ tên", "required": True},
+                        {"name": "ngay", "label": "Ngày", "type": "date", "required": True}])
+    # thiếu bắt buộc → lỗi, không điền
+    text, errs = fill_template(session, "don_xin_phep", {"ho_ten": "Trần B"})
+    assert errs and text == "Tôi {ho_ten}, nộp ngày {ngay}."
+    # đủ + đúng kiểu → điền
+    text, errs = fill_template(session, "don_xin_phep",
+                               {"ho_ten": "Trần B", "ngay": "2022-03-01"})
+    assert errs == [] and text == "Tôi Trần B, nộp ngày 2022-03-01."
+    # không có mẫu
+    _, errs = fill_template(session, "khong_co", {})
+    assert errs

@@ -29,3 +29,14 @@ def match_templates(session: Session, *, kind: str | None = None, query: str | N
             sa.select(Template).where(Template.lang == lang, Template.embedding.is_not(None))
             .order_by(Template.embedding.cosine_distance(qv)).limit(top)))
     return list(session.scalars(sa.select(Template).where(Template.lang == lang).limit(top)))
+
+
+def fill_template(session: Session, kind: str, values: dict, *, lang: str = "vi"):
+    """FR-38 — điền biểu mẫu `kind` DETERMINISTIC (validate slots + thế {name}), KHÔNG
+    LLM. Trả (text, errors). Không có mẫu → (None, ['không có mẫu'])."""
+    from .forms import fill_form
+    tpls = match_templates(session, kind=kind, lang=lang)
+    if not tpls:
+        return None, ["không có mẫu cho loại: " + kind]
+    t = tpls[0]
+    return fill_form(t.body, t.slots, values)
