@@ -10,9 +10,39 @@ import datetime as dt
 
 import sqlalchemy as sa
 
-from ..w2.models import Document, NormRelation, Unit, UnitVersion
+from ..w2.models import Authority, Document, NormRelation, Unit, UnitVersion
+from .metadata import DocMeta, extract_metadata
 from .relations import RelationCandidate, extract_relations
 from .structure import ParsedUnit, parse_structure
+
+# doc_type canonical → segment FRBR
+_TYPE_SEG = {
+    "nghi_dinh": "nd", "luat": "luat", "thong_tu": "tt",
+    "quyet_dinh": "qd", "nghi_quyet": "nq", "phap_lenh": "pl",
+}
+
+
+def derive_frbr_uri(meta: DocMeta) -> str | None:
+    """'99/2020/NĐ-CP' + nghi_dinh → 'trl:vn/nd/99/2020'. Thiếu dữ kiện → None."""
+    if not (meta.doc_number and meta.doc_type):
+        return None
+    seg = _TYPE_SEG.get(meta.doc_type)
+    parts = meta.doc_number.split("/")
+    if seg is None or len(parts) < 2:
+        return None
+    return f"trl:vn/{seg}/{parts[0]}/{parts[1]}"
+
+
+def _resolve_authority(session, name: str | None) -> int | None:
+    if not name:
+        return None
+    aid = session.scalar(sa.select(Authority.id).where(Authority.name == name))
+    if aid is None:
+        auth = Authority(name=name)
+        session.add(auth)
+        session.flush()
+        aid = auth.id
+    return aid
 
 
 def build_ingest(text: str, doc_slug: str) -> list[ParsedUnit]:
@@ -28,12 +58,15 @@ def load_to_w2(
     date_effective: dt.date,
     units: list[ParsedUnit],
     doc_number: str | None = None,
+    date_issued: dt.date | None = None,
+    authority_id: int | None = None,
     lang: str = "vi",
 ) -> Document:
     """Ghi Document + Unit (cây) + UnitVersion (bản gốc, valid_from=date_effective)."""
     doc = Document(
         frbr_uri=frbr_uri, doc_number=doc_number, doc_type=doc_type,
-        date_effective=date_effective, status="con_hieu_luc",
+        date_issued=date_issued, date_effective=date_effective,
+        authority_id=authority_id, status="con_hieu_luc",
     )
     session.add(doc)
     session.flush()
@@ -55,6 +88,43 @@ def load_to_w2(
             ))
     session.flush()
     return doc
+
+
+def ingest_document(
+    session,
+    text: str,
+    doc_slug: str,
+    *,
+    frbr_uri: str | None = None,
+    doc_type: str | None = None,
+    date_effective: dt.date | None = None,
+    doc_number: str | None = None,
+    lang: str = "vi",
+) -> tuple[Document, DocMeta]:
+    """Toàn trình W1: text → metadata + structure → W2 (không cần truyền tay).
+
+    Trường truyền tay (nếu có) GHI ĐÈ metadata trích tự động — người > máy. Thiếu
+    frbr_uri/doc_type/date_effective sau khi gộp → lỗi rõ ràng (không ingest nửa vời).
+    """
+    meta = extract_metadata(text)
+    frbr_uri = frbr_uri or derive_frbr_uri(meta)
+    doc_type = doc_type or meta.doc_type
+    doc_number = doc_number or meta.doc_number
+    date_effective = date_effective or meta.date_effective
+
+    missing = [n for n, v in
+               (("frbr_uri", frbr_uri), ("doc_type", doc_type), ("date_effective", date_effective))
+               if v is None]
+    if missing:
+        raise ValueError(f"metadata thiếu, không ingest: {', '.join(missing)} (doc_slug={doc_slug})")
+
+    authority_id = _resolve_authority(session, meta.authority_name)
+    doc = load_to_w2(
+        session, frbr_uri=frbr_uri, doc_type=doc_type, date_effective=date_effective,
+        units=build_ingest(text, doc_slug), doc_number=doc_number,
+        date_issued=meta.date_issued, authority_id=authority_id, lang=lang,
+    )
+    return doc, meta
 
 
 def _resolve_dst_unit(session, dst_doc_id: int, dieu: int) -> int | None:
