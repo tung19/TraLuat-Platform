@@ -40,6 +40,13 @@ def reindex_document(
     head = doc.doc_number or doc.frbr_uri
     paths = _paths(session, doc.id)
 
+    # ★ rebuild per-doc: XÓA chunk của doc trong namespace TRƯỚC → không để lại chunk
+    # của version đã bị thay thế (stale sau amendment/R5 tx-correction). L4 = ảnh của L3.
+    session.execute(
+        sa.delete(Chunk).where(
+            Chunk.namespace == namespace, Chunk.lang == lang,
+            Chunk.unit_id.in_(sa.select(Unit.id).where(Unit.document_id == doc.id))))
+
     rows = session.execute(
         sa.select(Unit.id, Unit.eid, UnitVersion.valid_from, UnitVersion.valid_to,
                   UnitVersion.text)
@@ -48,6 +55,7 @@ def reindex_document(
                UnitVersion.tx_to.is_(None), UnitVersion.text.is_not(None))
     ).all()
     if not rows:
+        session.flush()
         return 0
 
     embs = embedder.embed([r.text for r in rows]) if embedder is not None else [None] * len(rows)

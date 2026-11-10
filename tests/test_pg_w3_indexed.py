@@ -75,6 +75,19 @@ def test_pushdown_asof_marks_expired(session: Session):
     assert not at24["nd99__dieu_5"].applicable
 
 
+def test_reindex_no_stale_after_tx_correction(session: Session):
+    # review-fix: R5 tx-correction đổi version → reindex KHÔNG để lại chunk cũ (stale)
+    from traluat.w2.models import Unit, UnitVersion
+    reindex_document(session, FRBR)
+    vid = session.scalar(sa.select(UnitVersion.id).join(Unit)
+                         .where(Unit.eid == "nd99__dieu_3__khoan_1", UnitVersion.tx_to.is_(None)))
+    repo.correct_valid_from(session, vid, D(2021, 6, 1))
+    reindex_document(session, FRBR)
+    svs = session.execute(sa.text(
+        "select source_version from chunk where eid='nd99__dieu_3__khoan_1'")).all()
+    assert [r[0] for r in svs] == ["2021-06-01"]        # chỉ bản hiện hành, không stale
+
+
 def test_namespace_isolation(session: Session):
     reindex_document(session, FRBR, namespace="tenant:t1")   # index vào namespace khách
     q = "vốn pháp định tối thiểu"

@@ -145,6 +145,20 @@
 
 ---
 
+## Round 7 — REVIEW nền căn chỉnh B/D/T/I (sau deep-audit #2, Nov 2026)
+
+> Review code mới của 4 phase alignment (L4 index · RLS tenant · Gate2 NLI · egress/router). 1 bug thật tìm+sửa, probe xác nhận phần còn lại, ghi known-limitation.
+- **🟠 L4 reindex để lại chunk STALE:** sau amendment/R5 tx-correction, `reindex_document` upsert bản current-belief nhưng KHÔNG xóa chunk của version đã bị thay thế → `retrieve_indexed` trả version sai (vd khoan_1 có 2 chunk valid_from 2021-01-01 CŨ + 2021-06-01 mới). **Sửa:** rebuild per-doc — XÓA chunk của doc trong namespace trước khi insert (L4 = ảnh trung thực của L3). Test `test_reindex_no_stale_after_tx_correction`.
+- **Probe xác nhận ĐÚNG:** RLS no-fail-open (chưa-set→0, WITH CHECK chặn sai-tenant) · §8-A equivalence (L4≡L3 bản-tại-ngày) · NLIElementJudge 3-way · routing by-node · D6 idempotent.
+- **Known-limitation (ghi, chưa phải bug):**
+  - `chunk` L4 cô lập tenant ở **app-level** (tham số `namespaces`), chưa RLS — hoãn tới khi có client chunk (cùng posture gateway-guard). Khi có → thêm tenant_id + RLS cho chunk.
+  - `LegalService.lookup()` giả định `query` KHÔNG nhạy cảm (chế độ tra-cứu-công); tình tiết khách phải đi `analyze` (luôn sensitive). Ranh giới thiết kế, không phải lỗ.
+  - D6 dedup theo **frbr_uri** (không theo source_hash): sửa đổi nội dung luật đi qua `apply_amendment`, KHÔNG re-ingest; same-frbr-diff-text trả doc cũ.
+  - `audit_log` FORCE RLS → admin export cần role **BYPASSRLS** riêng (ops).
+  - `NLIElementJudge` suy `facts ⊨ element` (chưa đưa law_text vào NLI) — đủ cho slice; legal-NLI fine-tune sau.
+
+---
+
 ## Thứ tự sửa (ship order)
 1. **W5 C1–C6** (rò tenant/egress = vi phạm pháp luật) + **W1 C1/C3** (gate materialize + ẩn danh) — *trước khi bất kỳ dữ liệu khách/bản án nào chạm hệ.*
 2. **W2 C1/C2 + W4 C1–C3** (bitemporal invariant + hard-gate đúng) — *trước khi tin kết quả truy xuất/suy luận.*
