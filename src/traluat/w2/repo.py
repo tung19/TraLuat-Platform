@@ -245,6 +245,47 @@ def effect_status(
     return EffectStatus.EXPIRED_CITABLE
 
 
+def citable_text(
+    s: Session, eid: str, as_of: dt.date, lang: str = "vi",
+    known_as_of: dt.datetime | None = None,
+) -> tuple[str | None, EffectStatus]:
+    """Nguyên văn DÙNG ĐỂ TRÍCH DẪN tại as_of + effect_status (keep-and-mark §1/§8).
+
+    - IN_FORCE / TRANSITIONAL_APPLIES → bản đang áp (reconstruct_as_of).
+    - EXPIRED_CITABLE → bản in-force CUỐI trước khi hết (vẫn trích được, kèm status).
+    - NOT_YET → bản tương lai (để hiển thị + đánh dấu 'chưa hiệu lực').
+    - ABSENT → (None, ABSENT).
+    Tầng W3 tự hạ ưu tiên NOT_YET/EXPIRED khỏi 'thắng'; KHÔNG drop cứng.
+    """
+    known = known_as_of or dt.datetime.now(dt.timezone.utc)
+    status = effect_status(s, eid, as_of, lang, known_as_of=known)
+    if status in (EffectStatus.IN_FORCE, EffectStatus.TRANSITIONAL_APPLIES):
+        return reconstruct_as_of(s, eid, as_of, lang, known_as_of=known), status
+    if status == EffectStatus.ABSENT:
+        return None, status
+
+    base = (
+        sa.select(UnitVersion.text, UnitVersion.valid_from)
+        .join(Unit, Unit.id == UnitVersion.unit_id)
+        .where(
+            Unit.eid == eid, UnitVersion.lang == lang, UnitVersion.text.is_not(None),
+            UnitVersion.tx_from <= known,
+            sa.or_(UnitVersion.tx_to.is_(None), known < UnitVersion.tx_to),
+        )
+    )
+    if status == EffectStatus.NOT_YET:  # bản sớm nhất trong tương lai
+        row = s.execute(
+            base.where(UnitVersion.valid_from > as_of)
+            .order_by(UnitVersion.valid_from.asc()).limit(1)
+        ).first()
+    else:  # EXPIRED_CITABLE: bản in-force cuối trước mốc
+        row = s.execute(
+            base.where(UnitVersion.valid_from <= as_of)
+            .order_by(UnitVersion.valid_from.desc()).limit(1)
+        ).first()
+    return (row[0] if row else None), status
+
+
 # ── R5: correct_valid_from (tx-time — giữ 'điều hệ thống từng tin') ───────────────
 def correct_valid_from(
     s: Session, version_id: int, correct_valid_from: dt.date,
