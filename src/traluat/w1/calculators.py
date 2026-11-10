@@ -80,3 +80,65 @@ def _luong(session, params, as_of) -> CalcResult:
 def _le_phi(session, params, as_of) -> CalcResult:
     val, src = _lookup(session, "le_phi", params["loai"], as_of)
     return CalcResult("le_phi", val, src, as_of, f"le_phi/{params['loai']}")
+
+
+@calculator("thue_gtgt")
+def _thue_gtgt(session, params, as_of) -> CalcResult:
+    """35.2 — thuế GTGT: giá × thuế-suất@T (neo NĐ/TT). params={gia, loai}."""
+    gia = float(params["gia"])
+    rate, src = _lookup(session, "thue_gtgt", params.get("loai", "chung_10"), as_of)
+    r = float(rate["rate"])
+    thue = round(gia * r)
+    return CalcResult("thue_gtgt",
+                      {"thue": thue, "gia_sau_thue": round(gia + thue), "rate": r},
+                      src, as_of, f"thue_gtgt/{params.get('loai', 'chung_10')}")
+
+
+@calculator("lam_them_gio")
+def _lam_them_gio(session, params, as_of) -> CalcResult:
+    """35.9 — tiền làm thêm giờ = lương-giờ × hệ-số(loại ngày)@T × số giờ (neo BLLĐ).
+    params={luong_gio, so_gio, loai_ngay(ngay_thuong|ngay_nghi|ngay_le)}."""
+    luong_gio = float(params["luong_gio"])
+    so_gio = float(params["so_gio"])
+    loai = params.get("loai_ngay", "ngay_thuong")
+    rate, src = _lookup(session, "lam_them_rate", loai, as_of)
+    he_so = float(rate["rate"])
+    tien = round(luong_gio * he_so * so_gio)
+    return CalcResult("lam_them_gio", {"tien": tien, "he_so": he_so}, src, as_of,
+                      f"lam_them_rate/{loai}")
+
+
+def _progressive(taxable: float, brackets: list) -> float:
+    """Thuế luỹ tiến từng phần. brackets=[[upper, rate],…] tăng dần; upper=None=∞."""
+    tax = 0.0
+    lower = 0.0
+    for upper, rate in brackets:
+        cap = taxable if (upper is None or taxable < upper) else float(upper)
+        if cap > lower:
+            tax += (cap - lower) * float(rate)
+        if upper is None or taxable <= upper:
+            break
+        lower = float(upper)
+    return tax
+
+
+@calculator("gross_net")
+def _gross_net(session, params, as_of) -> CalcResult:
+    """35.6 — Gross→Net lương: trừ BH bắt buộc + TNCN luỹ-tiến sau giảm-trừ, theo
+    tỷ-lệ/biểu/giảm-trừ HIỆU-LỰC@T (neo luật). params={gross, nguoi_phu_thuoc?}."""
+    gross = float(params["gross"])
+    npt = int(params.get("nguoi_phu_thuoc", 0))
+
+    bh, _ = _lookup(session, "ty_le_bh", "nld", as_of)             # tổng BH phía NLĐ
+    gt, _ = _lookup(session, "giam_tru_gia_canh", "chuan", as_of)  # bản thân + phụ thuộc
+    bieu, src = _lookup(session, "bieu_thue_tncn", "thang", as_of)  # biểu luỹ tiến (neo luật)
+
+    insurance = round(gross * float(bh["rate"]))
+    giam_tru = float(gt["ban_than"]) + npt * float(gt["phu_thuoc"])
+    taxable = max(0.0, gross - insurance - giam_tru)
+    tax = round(_progressive(taxable, bieu["brackets"]))
+    net = round(gross - insurance - tax)
+    return CalcResult("gross_net",
+                      {"net": net, "bao_hiem": insurance, "thue_tncn": tax,
+                       "thu_nhap_tinh_thue": round(taxable)},
+                      src, as_of, "bieu_thue_tncn/thang (+ty_le_bh,giam_tru)")
