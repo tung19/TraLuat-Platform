@@ -20,6 +20,7 @@ from .source import (
     ingest_source,
 )
 from .ocr import NoOCR, OCREngine, PassthroughOCR
+from .ocr_detect import FullPageOCR, GridLineDetector, LineDetector, PaddleLineDetector
 
 __all__ = [
     "ParsedUnit",
@@ -44,4 +45,8 @@ __all__ = [
     "OCREngine",
     "NoOCR",
     "PassthroughOCR",
+    "LineDetector",
+    "GridLineDetector",
+    "PaddleLineDetector",
+    "FullPageOCR",
 ]

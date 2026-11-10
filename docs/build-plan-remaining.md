@@ -44,12 +44,12 @@
 - **Test** ✅: `test_w5_observability_kms.py` — span ghi được (InMemorySpanExporter) + attrs · span no-op an toàn · RemoteKMS roundtrip · thay SoftwareKMS↔RemoteKMS không đụng TenantCrypto + crypto-shred.
 - **🔌 Cần-ngoài:** OTel collector/Jaeger chạy (chỉ cần set env) · HSM/KMS thật (Vault/AWS) + `boto3`/`hvac`.
 
-## WP6 — OCR full-page (detector + recognizer)
-**Mục tiêu:** ảnh trang luật đầy đủ → text (hiện mới recognizer dòng).
-- **T6.1 Text detector** (`w1/ocr_detect.py`): CRAFT/PaddleOCR detection → cắt dòng → `VietOCREngine.extract_lines` (đã có) → ghép. Hoặc PaddleOCR end-to-end (det+rec VN).
-- **T6.2 Wire**: `ingest_source(ocr=FullPageOCR)` xử lý ảnh trang.
-- **Test:** render ảnh 2–3 dòng → detect+OCR ra đủ dòng (so với VietOCR dòng-đơn hiện tại).
-- **🔌 Cần-ngoài:** dep `paddleocr`/CRAFT + model download (safetensors) · ảnh mẫu thật.
+## WP6 — OCR full-page (detector + recognizer) ✅ XONG (port+wiring; model thật defer)
+**Mục tiêu:** ảnh trang luật đầy đủ → text (trước chỉ recognizer dòng).
+- **T6.1 Detector** ✅ (`w1/ocr_detect.py`): `LineDetector` port + `GridLineDetector` (tất định, không ML — chia dải ngang đều, baseline/demo) + `PaddleLineDetector` (impl thật, paddleocr lazy — defer model download).
+- **T6.2 FullPageOCR** ✅: `FullPageOCR(detector, recognizer)` **chính là OCREngine** → cắm thẳng `ingest_source(ocr=FullPageOCR(det, VietOCREngine()))` không đụng lõi (detect→recognize từng dòng→ghép).
+- **Test** ✅: `test_w1_ocr_fullpage.py` (ghép dòng · là OCREngine · GridLineDetector chia dải PNG hợp lệ · detect→recognize end-to-end) + `test_pg_w1_ocr.py` (FullPageOCR nạp ảnh-trang vào W2).
+- **🔌 Cần-ngoài:** dep `paddleocr`/CRAFT + model download (safetensors) · ảnh trang mẫu thật (để thay `GridLineDetector` → `PaddleLineDetector`).
 
 ## WP7 — FR-09 Alert luật mới (gửi thông báo) ✅ XONG
 **Mục tiêu:** phát hiện (đã có) → **gửi** cho người theo dõi.
