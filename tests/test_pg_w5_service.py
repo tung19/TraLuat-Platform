@@ -48,7 +48,7 @@ CTX = TenantContext("t1", role="lawyer")
 
 def test_client_data_routes_local_and_audits(session: Session):
     svc = _svc(session)
-    r = svc.analyze(CASE, D(2022, 1, 1), CTX, client_data=True, local_available=True)
+    r = svc.analyze(CASE, D(2022, 1, 1), CTX, local_available=True)   # facts sensitive (I3)
 
     assert r.answered and r.route.destination == LLMDestination.LOCAL
     assert r.ai_label is True and r.trace_id
@@ -59,7 +59,7 @@ def test_client_data_routes_local_and_audits(session: Session):
 
 def test_client_data_local_down_denies_never_claude(session: Session):
     svc = _svc(session)
-    r = svc.analyze(CASE, D(2022, 1, 1), CTX, client_data=True, local_available=False)
+    r = svc.analyze(CASE, D(2022, 1, 1), CTX, local_available=False)   # facts sensitive (I3)
 
     assert not r.answered and r.route.destination == LLMDestination.DENY  # ★ R2
     assert r.route.destination != LLMDestination.CLAUDE
@@ -69,16 +69,16 @@ def test_client_data_local_down_denies_never_claude(session: Session):
 
 
 def test_public_lookup_allowed_to_claude(session: Session):
+    # I3: câu hỏi THUẦN KB (lookup, không tình tiết khách) → public → ra Claude
     svc = _svc(session)
-    r = svc.analyze(CASE, D(2022, 1, 1), CTX, client_data=False, local_available=True)
+    r = svc.lookup("vốn pháp định tối thiểu", D(2022, 1, 1), CTX, local_available=True)
     assert r.route.destination == LLMDestination.CLAUDE   # dữ liệu công → ra ngoài được
-    assert r.answered
+    assert r.answered and r.answer is not None
 
 
-def test_public_without_claude_gateway_falls_back_local(session: Session):
-    # review-fix #1: không cấu hình claude_gateway → public chạy LOCAL, không deny oan
+def test_public_lookup_without_claude_gateway_falls_back_local(session: Session):
     load_to_w2(session, frbr_uri=FRBR, doc_type="nghi_dinh", date_effective=D(2021, 1, 1),
                units=build_ingest(SAMPLE, "nd99"), doc_number="99/2020/NĐ-CP")
     svc = LegalService(session, local_gateway=EchoLLMGateway(), claude_gateway=None)
-    r = svc.analyze(CASE, D(2022, 1, 1), CTX, client_data=False, local_available=True)
+    r = svc.lookup("vốn pháp định tối thiểu", D(2022, 1, 1), CTX, local_available=True)
     assert r.route.destination == LLMDestination.LOCAL and r.answered

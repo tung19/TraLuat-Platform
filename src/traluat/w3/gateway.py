@@ -137,21 +137,27 @@ class EchoLLMGateway(BaseLLMGateway):
 
 
 class ClaudeLLMGateway(BaseLLMGateway):
-    """THẬT — Claude qua Anthropic SDK + structured outputs. Cần credential runtime."""
+    """THẬT — Claude qua Anthropic SDK + structured outputs. Cần credential runtime.
 
-    def __init__(self, *, model: str = DEFAULT_MODEL, effort: str = "high", **kw) -> None:
+    model/effort chọn theo NODE qua router (I2); `model=` cố định override router."""
+
+    def __init__(self, *, model: str | None = None, **kw) -> None:
         super().__init__(**kw)
-        self.model = model
-        self.effort = effort
+        self.fixed_model = model          # None → router theo node
 
     def model_name(self) -> str:
-        return self.model
+        return self.fixed_model or "claude-router"
 
     def _draft(self, query, chunks, prompt, as_of, node, lang) -> tuple[str, list[Citation]]:
         try:
             import anthropic
         except ImportError as e:  # noqa: BLE001
             raise NotConfigured("gói 'anthropic' chưa cài — pip install anthropic") from e
+
+        from .routing import route
+        choice = route(node)
+        model = self.fixed_model or choice.model
+        effort = choice.effort
 
         client = anthropic.Anthropic()  # tự resolve ANTHROPIC_API_KEY / ant profile
         schema = {
@@ -170,10 +176,10 @@ class ClaudeLLMGateway(BaseLLMGateway):
         }
         try:
             resp = client.messages.create(
-                model=self.model, max_tokens=16000,
+                model=model, max_tokens=16000,
                 system=_SYSTEM_VI,
                 thinking={"type": "adaptive"},
-                output_config={"effort": self.effort,
+                output_config={"effort": effort,
                                "format": {"type": "json_schema", "schema": schema}},
                 messages=[{"role": "user", "content": prompt}],
             )

@@ -26,8 +26,8 @@ class AnalyzeRequest(BaseModel):
     facts: str
     as_of: str                       # ISO date
     parties: list[str] | None = None
-    client_data: bool = True
-    # B5: KHÔNG nhận local_available từ client — service tự health-probe gateway (R2).
+    # I3: tình tiết LUÔN client-sensitive (không có cờ client_data).
+    # B5: local_available do service health-probe, không nhận từ client.
 
 
 def get_service() -> LegalService:   # placeholder — create_app/ test override
@@ -64,8 +64,7 @@ def create_app(*, jwt_secret: str, service_provider) -> FastAPI:
             raise HTTPException(403, str(e))
         resp = svc.analyze(
             CaseInput(facts=body.facts, parties=body.parties or []),
-            dt.date.fromisoformat(body.as_of), ctx,
-            client_data=body.client_data,   # local_available: service tự probe (B5)
+            dt.date.fromisoformat(body.as_of), ctx,   # facts sensitive (I3); probe (B5)
         )
         return {
             "answered": resp.answered,

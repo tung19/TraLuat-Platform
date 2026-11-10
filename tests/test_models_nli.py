@@ -25,3 +25,13 @@ def test_entailment_promotes(nli):
 def test_contradiction_and_unrelated_hold(nli):
     assert nli.supports("Doanh nghiệp không phải nộp hồ sơ.", _SRC) == "hold"
     assert nli.supports("Thủ tục ly hôn được quy định riêng.", _SRC) == "hold"
+
+
+def test_nli_element_judge_three_way(nli):
+    # I1: Gate 2 THẬT bằng NLI — entail→True · contradict→False · neutral→None
+    from traluat.w4.element_judge import NLIElementJudge
+    j = NLIElementJudge(nli=nli)
+    facts = "Doanh nghiệp đã nộp hồ sơ đăng ký kinh doanh đúng thời hạn."
+    assert j.judge("doanh nghiệp đã nộp hồ sơ", "", facts) is True
+    assert j.judge("doanh nghiệp chưa nộp bất kỳ hồ sơ nào", "", facts) is False
+    assert j.judge("doanh nghiệp có trụ sở tại Hà Nội", "", facts) is None

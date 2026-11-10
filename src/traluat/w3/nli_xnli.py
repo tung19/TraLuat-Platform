@@ -26,11 +26,20 @@ class XNLIVerifier:
         self._ent = next(i for i, l in self._model.config.id2label.items()
                          if "entail" in l.lower())
 
-    def supports(self, claim: str, source: str) -> str:
+    def _probs(self, premise: str, hypothesis: str):
         import torch
 
-        inputs = self._tok(source, claim, return_tensors="pt",
+        inputs = self._tok(premise, hypothesis, return_tensors="pt",
                            truncation=True, max_length=512).to(self.device)
         with torch.no_grad():
-            probs = self._model(**inputs).logits.softmax(-1)[0]
-        return "promote" if probs[self._ent].item() >= self.threshold else "hold"
+            return self._model(**inputs).logits.softmax(-1)[0]
+
+    def supports(self, claim: str, source: str) -> str:
+        # gate3: source (premise) hỗ trợ claim (hypothesis)? entail ≥ θ → promote.
+        return "promote" if self._probs(source, claim)[self._ent].item() >= self.threshold else "hold"
+
+    def label(self, premise: str, hypothesis: str) -> str:
+        """Nhãn NLI argmax: 'entailment' | 'neutral' | 'contradiction' (3-way)."""
+        probs = self._probs(premise, hypothesis)
+        idx = int(probs.argmax().item())
+        return self._model.config.id2label[idx].lower()
