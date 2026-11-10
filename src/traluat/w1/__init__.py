@@ -1,7 +1,7 @@
 """W1 — Data pipeline (ingest → cấu trúc hóa + eId → quan hệ → handoff W2)."""
 
 from .structure import ParsedUnit, parse_structure
-from .metadata import DocMeta, extract_metadata
+from .metadata import DocMeta, extract_effective_overrides, extract_metadata
 from .relations import RelationCandidate, extract_relations
 from .ingest import (
     build_ingest,
@@ -17,6 +17,7 @@ __all__ = [
     "parse_structure",
     "DocMeta",
     "extract_metadata",
+    "extract_effective_overrides",
     "RelationCandidate",
     "extract_relations",
     "build_ingest",

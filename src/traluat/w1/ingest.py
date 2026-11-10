@@ -11,7 +11,7 @@ import datetime as dt
 import sqlalchemy as sa
 
 from ..w2.models import Authority, Document, NormRelation, Unit, UnitVersion
-from .metadata import DocMeta, extract_metadata
+from .metadata import DocMeta, extract_effective_overrides, extract_metadata
 from .relations import RelationCandidate, extract_relations
 from .structure import ParsedUnit, parse_structure
 
@@ -60,9 +60,23 @@ def load_to_w2(
     doc_number: str | None = None,
     date_issued: dt.date | None = None,
     authority_id: int | None = None,
+    effective_overrides: dict[str, dt.date] | None = None,
     lang: str = "vi",
 ) -> Document:
-    """Ghi Document + Unit (cây) + UnitVersion (bản gốc, valid_from=date_effective)."""
+    """Ghi Document + Unit (cây) + UnitVersion (bản gốc, valid_from=date_effective).
+
+    effective_overrides {eid: ngày} = phased-commencement: đơn vị (và con của nó)
+    lấy valid_from riêng; override cụ thể nhất (eid dài nhất khớp) thắng.
+    """
+    ov = effective_overrides or {}
+
+    def _valid_from(eid: str) -> dt.date:
+        best: tuple[str, dt.date] | None = None
+        for k, when in ov.items():
+            if (eid == k or eid.startswith(k + "__")) and (best is None or len(k) > len(best[0])):
+                best = (k, when)
+        return best[1] if best else date_effective
+
     doc = Document(
         frbr_uri=frbr_uri, doc_number=doc_number, doc_type=doc_type,
         date_issued=date_issued, date_effective=date_effective,
@@ -83,7 +97,7 @@ def load_to_w2(
         eid_to_id[u.eid] = unit.id
         if u.text:  # chỉ đơn vị NỘI DUNG có version (kết cấu → không)
             session.add(UnitVersion(
-                unit_id=unit.id, lang=lang, valid_from=date_effective, valid_to=None,
+                unit_id=unit.id, lang=lang, valid_from=_valid_from(u.eid), valid_to=None,
                 text=u.text, status="con_hieu_luc",
             ))
     session.flush()
@@ -122,7 +136,8 @@ def ingest_document(
     doc = load_to_w2(
         session, frbr_uri=frbr_uri, doc_type=doc_type, date_effective=date_effective,
         units=build_ingest(text, doc_slug), doc_number=doc_number,
-        date_issued=meta.date_issued, authority_id=authority_id, lang=lang,
+        date_issued=meta.date_issued, authority_id=authority_id,
+        effective_overrides=extract_effective_overrides(text, doc_slug), lang=lang,
     )
     return doc, meta
 

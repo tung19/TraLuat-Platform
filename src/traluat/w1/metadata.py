@@ -27,6 +27,13 @@ _RE_HIEU_LUC = re.compile(
     re.IGNORECASE,
 )
 _RE_HIEU_LUC_KY = re.compile(r"có hiệu lực(?:\s+thi hành)?\s+(?:kể\s+)?từ ngày ký", re.IGNORECASE)
+# phased-commencement: '(Khoản M )Điều N … có hiệu lực … kể từ ngày DD tháng MM năm YYYY'
+# — trong CÙNG một mệnh đề (tiêu đề 'Điều N.' đã tách riêng nên không dính false-positive).
+_RE_HL_UNIT = re.compile(
+    r"(?:Khoản\s+(\d+)\s+)?Điều\s+(\d+)\b.*?"
+    r"có hiệu lực(?:\s+thi hành)?\s+(?:kể\s+)?từ ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})",
+    re.IGNORECASE,
+)
 
 # hậu tố số hiệu → doc_type canonical (khớp legal_rule_base)
 _SUFFIX_TYPE = {
@@ -96,3 +103,34 @@ def extract_metadata(text: str) -> DocMeta:
         meta.date_effective = meta.date_issued  # 'kể từ ngày ký' → = ngày ban hành
 
     return meta
+
+
+def _clauses(text: str) -> list[str]:
+    text = unicodedata.normalize("NFC", text)
+    out: list[str] = []
+    for ln in text.splitlines():
+        ln = ln.strip()
+        if ln:
+            out.extend(p.strip() for p in re.split(r"(?<=[.;:])\s+", ln) if p.strip())
+    return out
+
+
+def extract_effective_overrides(text: str, doc_slug: str) -> dict[str, dt.date]:
+    """Hiệu lực lệch cấp Điều/Khoản (phased-commencement) → {eid: ngày}.
+
+    CHỈ bắt mệnh đề nói rõ 'Điều N … có hiệu lực … kể từ ngày …' (tự-chiếu VB
+    'Nghị định này …' không có 'Điều N' nên bị loại — đó là hiệu lực cấp văn bản).
+    Khoản cụ thể → eid khoản; else cấp Điều (lan cho con khi nạp).
+    """
+    out: dict[str, dt.date] = {}
+    for clause in _clauses(text):
+        for m in _RE_HL_UNIT.finditer(clause):
+            khoan, dieu, d, mo, y = m.groups()
+            when = _mk_date(d, mo, y)
+            if when is None:
+                continue
+            eid = f"{doc_slug}__dieu_{dieu}"
+            if khoan:
+                eid += f"__khoan_{khoan}"
+            out[eid] = when
+    return out
