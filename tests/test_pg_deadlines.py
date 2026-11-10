@@ -8,10 +8,10 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-import traluat.w1.deadlines  # noqa: F401  (đăng ký @calculator("thoi_hieu"))
-from traluat.w1 import calculators
-from traluat.w1.deadlines import compute_deadline
-from traluat.w1.reference import RefRow, upsert_reference
+import traluat.tools.deadlines  # noqa: F401  (đăng ký @calculator("thoi_hieu"))
+from traluat.tools import calculators
+from traluat.tools.deadlines import compute_deadline
+from traluat.tools.reference import RefRow, upsert_reference
 from traluat.w2.db import make_engine
 
 D = dt.date
@@ -87,7 +87,7 @@ def test_holiday_from_reference_rolls_deadline(session: Session):
     _seed(session)
     # nạp ngày lễ âm (vd mùng 1 Tết) rơi đúng ngày hết hạn → lùi qua lễ
     # chọn start sao cho +15 ngày = một ngày THƯỜNG (T4) rồi đánh dấu nó là lễ
-    from traluat.w1.reference import RefRow as RR
+    from traluat.tools.reference import RefRow as RR
     upsert_reference(session, "ngay_nghi", [
         RR("2022", {"dates": ["2022-03-16"]}, D(2000, 1, 1), None, None)],
         pii_check=False)
@@ -98,7 +98,7 @@ def test_holiday_from_reference_rolls_deadline(session: Session):
 
 def test_rollover_across_year_boundary_uses_next_year_holidays(session: Session):
     # F5: hạn rơi cuối năm, lùi sang lễ ÂM năm SAU phải được nạp (không chỉ raw.year).
-    from traluat.w1.reference import RefRow as RR
+    from traluat.tools.reference import RefRow as RR
     upsert_reference(session, "thoi_hieu", [
         RR("khieu_nai_lan_dau", {"value": 1, "unit": "day"},
            D(2012, 7, 1), None, "luatkn__dieu_9")], pii_check=False)
@@ -118,7 +118,7 @@ def test_rollover_across_year_boundary_uses_next_year_holidays(session: Session)
 
 def test_deadline_auto_rolls_over_tet_without_reference(session: Session):
     # 35.14: lễ Tết TÍNH TỰ ĐỘNG (không cần seed ngay_nghi) → hạn rơi Tết tự lùi.
-    from traluat.w1.reference import RefRow as RR
+    from traluat.tools.reference import RefRow as RR
     upsert_reference(session, "thoi_hieu", [
         RR("khieu_nai_lan_dau", {"value": 1, "unit": "day"},
            D(2012, 7, 1), None, "luatkn__dieu_9")], pii_check=False)

@@ -8,7 +8,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from traluat.w1.reference import RefRow, lookup_reference, upsert_reference
+from traluat.tools.reference import RefRow, lookup_reference, upsert_reference
 from traluat.w2.db import make_engine
 from traluat.w2.models import ReferenceValue
 

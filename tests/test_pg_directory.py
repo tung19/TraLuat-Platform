@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 pytest.importorskip("geoalchemy2")
 
-from traluat.w1.directory import (
+from traluat.tools.directory import (
     DirectoryQuarantined,
     add_directory_entry,
     nearby,

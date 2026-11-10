@@ -8,8 +8,8 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from traluat.w1.calculators import available, run
-from traluat.w1.reference import RefRow, upsert_reference
+from traluat.tools.calculators import available, run
+from traluat.tools.reference import RefRow, upsert_reference
 from traluat.w2.db import make_engine
 
 D = dt.date

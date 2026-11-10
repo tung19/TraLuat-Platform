@@ -529,7 +529,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
                          kind: str | None = None, ctx: TenantContext = Depends(auth),
                          svc: LegalService = Depends(get_service)):
         # FR-39 — danh bạ LS/công chứng/toà gần toạ độ (KB công, không tình tiết khách).
-        from ..w1.directory import nearby
+        from ..tools.directory import nearby
         hits = nearby(svc.s, lat, lon, radius_m, kind=kind)
         return [{"id": h.entry.id, "kind": h.entry.kind, "name": h.entry.name,
                  "address": h.entry.address, "phone": h.entry.phone,
@@ -690,7 +690,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
                  ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
         # FR-35.13 — thời hiệu/thời hạn tố tụng@as_of (neo điều luật, lùi ngày nghỉ).
         need(ctx, "viewer", "lawyer", "reviewer", "owner")
-        from ..w1.deadlines import compute_deadline
+        from ..tools.deadlines import compute_deadline
         a = parse_date(as_of, default=dt.date.today())
         try:
             r = compute_deadline(svc.s, kind, parse_date(start), a)

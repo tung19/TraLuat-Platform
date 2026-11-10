@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from traluat.w1.forms import FormField, fill_form, validate_form
+from traluat.tools.forms import FormField, fill_form, validate_form
 
 _SLOTS = [
     {"name": "ho_ten", "label": "Họ tên", "type": "text", "required": True},

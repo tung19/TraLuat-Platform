@@ -96,7 +96,7 @@ class PetitionDraftService:
 
     def draft(self, kind: str, facts: str, as_of: dt.date, *,
               tenant_id: str | None = None, lang: str = "vi", top_k: int = 5) -> DraftResult:
-        from ..w1.templates import match_templates
+        from ..tools.templates import match_templates
         from ..w3 import ground, retrieve
 
         tpls = match_templates(self.s, kind=kind, lang=lang)

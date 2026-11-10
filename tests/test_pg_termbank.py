@@ -8,7 +8,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from traluat.w1.termbank import add_term, lookup_term
+from traluat.tools.termbank import add_term, lookup_term
 from traluat.w2.db import make_engine
 
 D = dt.date

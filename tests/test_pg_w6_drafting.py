@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from traluat.w1 import build_ingest, load_to_w2
-from traluat.w1.templates import add_template, match_templates
+from traluat.tools.templates import add_template, match_templates
 from traluat.w2.db import make_engine
 from traluat.w3 import EchoLLMGateway
 from traluat.w6 import PetitionDraftService
@@ -62,7 +62,7 @@ def test_draft_abstains_without_template(session: Session):
 
 def test_fill_template_form_validates_and_fills(session: Session):
     # FR-38: biểu mẫu có cấu trúc + validation qua template store
-    from traluat.w1.templates import fill_template
+    from traluat.tools.templates import fill_template
     add_template(session, "don_xin_phep",
                  "Đơn xin phép", "Tôi {ho_ten}, nộp ngày {ngay}.",
                  slots=[{"name": "ho_ten", "label": "Họ tên", "required": True},

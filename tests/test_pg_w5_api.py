@@ -142,7 +142,7 @@ def test_directory_page(client):
 
 def test_directory_nearby_endpoint(client):
     pytest.importorskip("geoalchemy2")
-    from traluat.w1.directory import add_directory_entry
+    from traluat.tools.directory import add_directory_entry
 
     # chèn 1 mục qua session của service (client fixture dùng chung session s)
     from traluat.w5.api import get_service
@@ -196,7 +196,7 @@ def test_tools_page_english(client):
 def test_deadline_endpoint(client):
     import datetime as _dt
 
-    from traluat.w1.reference import RefRow, upsert_reference
+    from traluat.tools.reference import RefRow, upsert_reference
     from traluat.w5.api import get_service
     svc = next(client.app.dependency_overrides[get_service]())
     upsert_reference(svc.s, "thoi_hieu", [

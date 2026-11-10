@@ -23,7 +23,7 @@ Revision ID: 0001_baseline
 Revises:
 """
 
-import traluat.w1.directory
+import traluat.tools.directory
 import traluat.w4.checkpoint
 import traluat.w5.models  # noqa: F401 — tenant/audit/alert/analysis_task lên Base
 from alembic import op
