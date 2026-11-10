@@ -10,6 +10,14 @@ Rà soát đối-nghịch code mới (L9 endpoints, deadlines/calendar, geo, ale
 - **Lỗi thật**: `seed_deadlines.py`/`seed_directory.py` `commit()` vào DB dev = DB test. `test_pg_reference` (`_count` đếm TOÀN bảng) và `test_pg_directory` (kind-filter) giả định bảng rỗng → vỡ khi có seed.
 - **Sửa**: `_count` scope theo (dataset,key); kind-filter assert "mọi hit đúng loại". Robust với seed-data đã commit, vẫn chứng minh idempotent/filter.
 
+## ✅ F6 (correctness — ĐÃ SỬA): bitemporal read trộn đồng-hồ host↔DB (clock skew)
+- **Lỗi thật**: `reconstruct_as_of`/`effect_status`/`document_as_of`/`correct_valid_from` đặt `known` (mốc transaction-time "hiện tại") = `datetime.now()` của **host**, trong khi `tx_from` = `now()` của **DB** (server-default). DB chạy trong container (đồng hồ lệch host ~chục ms, có lúc NHANH hơn) → `tx_from > known` → **dòng VỪA GHI bị ẩn** → reconstruct `None`. Biểu hiện: test đọc-ngay-sau-ghi (materialize) **flaky** khi DB-clock > host-clock. Đây là lỗi bitemporal thật (không chỉ test): bất kỳ lệch đồng-hồ app↔DB nào cũng ẩn bản vừa commit.
+- **Sửa**: helper `_db_now(s)=SELECT now()` → `known`/`now` mặc định lấy ĐỒNG HỒ DB (cùng nguồn `tx_from`). 4 site trong `w2/repo.py`. Regression `test_just_written_row_visible_with_default_known`. Suite ổn định 5/5 lần.
+
+## ✅ F7 (test-infra — ĐÃ LÀM): tách DB test riêng `traluat_test` (yêu cầu của F2/F3)
+- `tests/conftest.py`: mỗi phiên drop+tạo `traluat_test` + **clone schema-only** từ dev (`pg_dump --schema-only`), set `DATABASE_URL`. Demo-seed đổ `traluat`, test chạy `traluat_test` → hết class seed-pollution.
+- **Phát hiện kèm**: chuỗi migration KHÔNG replay-được từ rỗng (0001 `create_all` dựng `document` đủ cột, 0005 `add_column source_hash` → trùng) — **lỗi fresh-deploy tiềm ẩn**. Clone schema-only né được; cần sửa migration cho CI/deploy sạch (ghi nhận, chưa sửa).
+
 ## ⚠️ F3 (latent — GHI NHẬN): 4 test khác vẫn đếm-toàn-bảng
 - `test_pg_bitemporal`(UnitVersion) · `test_pg_w3_indexed`(Chunk) · `test_pg_w5_rls`(AuditLogRow) · `test_pg_phase_d_followup`(Document) dùng `count().select_from(...)` không `where`. Hiện XANH vì chưa seed các bảng đó. **Rủi ro**: seed sau này vào chúng → vỡ. Nên: DB test riêng, hoặc scope mọi count theo khoá. (Chưa sửa — không broken.)
 

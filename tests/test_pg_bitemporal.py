@@ -10,11 +10,11 @@ import datetime as dt
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.orm import Session
 
 from traluat.w2 import repo
 from traluat.w2.db import make_engine
 from traluat.w2.models import Document, Unit, UnitVersion
-from sqlalchemy.orm import Session
 
 D = dt.date
 EID = "nd99__dieu_3__khoan_2"
@@ -58,6 +58,17 @@ def test_reconstruct_via_db(session: Session):
     assert repo.reconstruct_as_of(session, EID, D(2020, 12, 31)) is None
     assert repo.reconstruct_as_of(session, EID, D(2022, 1, 1)) == "Mức vốn 20 tỷ."
     assert repo.reconstruct_as_of(session, EID, D(2023, 6, 1)) == "Mức vốn 50 tỷ."  # biên
+
+
+def test_just_written_row_visible_with_default_known(session: Session):
+    """Regression (deep-audit #3 F6): `known` mặc định lấy ĐỒNG HỒ DB (cùng nguồn
+    tx_from). Trước đây dùng datetime.now() host → DB (container) nhanh hơn host →
+    tx_from > known → dòng VỪA GHI bị ẩn → reconstruct None (flaky). Đọc-ngay-sau-ghi
+    PHẢI thấy."""
+    _seed(session)
+    # không truyền known_as_of → dùng _db_now(s); dòng vừa flush phải in-force @2022
+    assert repo.reconstruct_as_of(session, EID, D(2022, 1, 1)) == "Mức vốn 20 tỷ."
+    assert repo.effect_status(session, EID, D(2022, 1, 1)) is not None
 
 
 def test_idempotent_via_db(session: Session):

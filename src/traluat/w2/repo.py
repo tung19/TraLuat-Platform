@@ -8,12 +8,11 @@ chồng khoảng → Postgres RAISE (uv_no_overlap) — fail-loud ở tầng d�
 from __future__ import annotations
 
 import datetime as dt
+from collections import defaultdict
+from dataclasses import dataclass, field
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
-
-from collections import defaultdict
-from dataclasses import dataclass, field
 
 from .. import legal_rule_base as lrb
 from .bitemporal import BitemporalCorruption, EffectStatus
@@ -30,12 +29,19 @@ def _unit_id(s: Session, eid: str) -> int:
     return uid
 
 
+def _db_now(s: Session) -> dt.datetime:
+    """Transaction-time 'hiện tại' theo ĐỒNG HỒ DB (cùng nguồn với tx_from=now()).
+    KHÔNG dùng datetime.now() của host: lệch đồng-hồ host↔DB (vd DB trong container
+    chạy nhanh hơn) khiến `tx_from > known` → dòng vừa ghi bị ẩn (bitemporal sai)."""
+    return s.scalar(sa.select(sa.func.now()))
+
+
 def reconstruct_as_of(
     s: Session, eid: str, as_of: dt.date, lang: str = "vi",
     known_as_of: dt.datetime | None = None,
 ) -> str | None:
     """Văn bản tại ngày T (SQL). None nếu vắng/bãi bỏ; raise nếu >1 dòng (hỏng)."""
-    known = known_as_of or dt.datetime.now(dt.timezone.utc)
+    known = known_as_of or _db_now(s)
     rows = s.execute(
         sa.select(UnitVersion.text)
         .join(Unit, Unit.id == UnitVersion.unit_id)
@@ -233,7 +239,7 @@ def effect_status(
     s: Session, eid: str, as_of: dt.date, lang: str = "vi",
     known_as_of: dt.datetime | None = None,
 ) -> EffectStatus:
-    known = known_as_of or dt.datetime.now(dt.timezone.utc)
+    known = known_as_of or _db_now(s)
     rows = list(
         s.execute(
             sa.select(UnitVersion.valid_from, UnitVersion.valid_to,
@@ -272,7 +278,7 @@ def citable_text(
     - ABSENT → (None, ABSENT).
     Tầng W3 tự hạ ưu tiên NOT_YET/EXPIRED khỏi 'thắng'; KHÔNG drop cứng.
     """
-    known = known_as_of or dt.datetime.now(dt.timezone.utc)
+    known = known_as_of or _db_now(s)
     status = effect_status(s, eid, as_of, lang, known_as_of=known)
     if status == EffectStatus.IN_FORCE:
         return reconstruct_as_of(s, eid, as_of, lang, known_as_of=known), status
@@ -334,7 +340,7 @@ def correct_valid_from(
     Đóng bản sai ở trục transaction-time (tx_to=now, giữ để audit) + chèn bản ĐÚNG
     (tx_from=now). → truy vấn với known_as_of trong quá khứ vẫn trả điều hệ-thống-từng-tin.
     """
-    now = now or dt.datetime.now(dt.timezone.utc)
+    now = now or _db_now(s)          # đồng hồ DB (khớp tx_from server-default + reads)
     v = s.get(UnitVersion, version_id)
     if v is None or v.tx_to is not None:
         raise BitemporalCorruption(f"version {version_id} không tồn tại / không còn current")
