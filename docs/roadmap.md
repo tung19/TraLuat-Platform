@@ -104,7 +104,12 @@ Phase 5  Diện rộng + Portability      ──►  nuốt thị trường + n�
 - Durable checkpointer (`InMemory/PostgresCheckpointer`, C3 prefix tenant) → `MultiRoleReasoner.run(checkpointer=)` resume không audit lại.
 - Eval: `load_gold` (JSONL) + `EvalReport.gate` (CI fail-safe) + `eval/gold/smoke.jsonl`.
 
-**CHƯA CÓ KHUNG (net-new, cần model/UI/chuyên gia):** impl model thật cho các port (ViLegalBERT/LLM-NLI · Vintern OCR · contradiction model · bge-m3/BM25/rerank · ClaudeLLMGateway call thật) · **gold moat thật** (effectivity/omission/conflict — chuyên gia label) · L-MARS 6-lớp + Faith-Search repair · W5 Celery/SSE + migration tenant tables + RLS áp thật · W6 workflow UI/frontend · chốt `authority_rank` 2025 từ primary-text.
+**Model THẬT đã cắm (chạy local M5, optional dep group `models`, import lười → core test vẫn pure):**
+- **bge-m3** (`embed_bge.BgeM3Embedder`, 1024d, MPS) → `retrieve(embedder=)` dense ngữ nghĩa — bắt điều không trùng từ khóa mà lexical bỏ lỡ.
+- **XNLI mDeBERTa** (`nli_xnli.XNLIVerifier`, MPS) → gate3 entail→promote / contradiction→hold (verify thật tiếng Việt).
+- **VietOCR** (`ocr_vietocr.VietOCREngine`, recognizer dòng) → OCREngine port, đọc đúng dấu tiếng Việt (0.1s/dòng). *(Vintern-1B remote-code chưa tương thích transformers 5 → dùng VietOCR; full-page cần detector dòng — defer.)*
+
+**CHƯA CÓ KHUNG (cần API/UI/chuyên gia):** `ClaudeLLMGateway` call thật (cần API key) · BM25/rerank cross-encoder · legal-NLI + contradiction model fine-tune (đổi model_name) · detector dòng cho OCR full-page · **gold moat thật** (effectivity/omission/conflict — chuyên gia label) · L-MARS 6-lớp + Faith-Search · W5 Celery/SSE + migration tenant tables + RLS áp thật · W6 workflow UI · chốt `authority_rank` 2025 từ primary-text.
 
 ---
 
