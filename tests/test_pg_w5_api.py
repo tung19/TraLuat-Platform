@@ -95,6 +95,36 @@ def test_graph_central_empty_without_neo4j(client):
     assert r.status_code == 200 and r.json() == {}
 
 
+def _lawyer():
+    return {"Authorization": f"Bearer {_tok(tenant_id='t1', role='lawyer')}"}
+
+
+def test_doc_citation_nav(client):
+    r = client.get("/doc?frbr=trl:vn/nd/99/2020&as_of=2022-01-01", headers=_lawyer())
+    assert r.status_code == 200
+    assert "Điều 3" in r.json()["text"]                 # văn bản tại ngày T
+
+
+def test_review_endpoint(client):
+    r = client.post("/review", json={"text": "Hợp đồng. Hai bên cam kết bảo mật thông tin."},
+                    headers=_lawyer())
+    assert r.status_code == 200
+    f = {x["rule"]: x["status"] for x in r.json()}
+    assert f["bảo mật"] == "present" and f["bất khả kháng"] == "missing"
+
+
+def test_review_viewer_forbidden(client):
+    r = client.post("/review", json={"text": "x"},
+                    headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='viewer')}"})
+    assert r.status_code == 403
+
+
+def test_review_queue(client):
+    r = client.get("/review/queue",
+                   headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='reviewer')}"})
+    assert r.status_code == 200 and isinstance(r.json(), list)   # HITL queue
+
+
 def test_graph_endpoint(client):
     r = client.get("/graph/nd99__dieu_1",
                    headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='viewer')}"})

@@ -32,7 +32,7 @@ body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0
 .abstain{color:#b91c1c;font-weight:600}.ai{font-size:.75rem;color:#64748b}
 textarea,input{font:inherit}</style></head>
 <body><h1>TraLuat — trợ lý pháp lý</h1>
-<p><a href="/graph">→ Đồ thị quan hệ quy phạm (FR-37)</a></p>
+<p><a href="/graph">→ Đồ thị quy phạm (FR-37)</a> · <a href="/review">→ Rà soát hợp đồng</a></p>
 <p>Nhập tình tiết + <b>ngày sự kiện</b> (không phải ngày hỏi). Kết quả có
 <b>trích dẫn điều–khoản tại ngày T</b> kèm trạng thái hiệu lực, hoặc
 <b>abstain</b> khi không đủ căn cứ. Mọi output gắn nhãn AI (Luật 71/2025).</p>
@@ -66,6 +66,20 @@ class AnalyzeRequest(BaseModel):
     parties: list[str] | None = None
     # I3: tình tiết LUÔN client-sensitive (không có cờ client_data).
     # B5: local_available do service health-probe, không nhận từ client.
+
+
+class ReviewRequest(BaseModel):
+    text: str
+    rules: list[dict] | None = None   # [{name, any_of:[...]}], None → playbook mặc định
+
+
+# playbook rà soát mặc định (FR Review / omission moat #2) — chuyên gia mở rộng (L14).
+_DEFAULT_REVIEW_RULES = [
+    {"name": "bảo mật", "any_of": ["bảo mật", "giữ bí mật"]},
+    {"name": "giải quyết tranh chấp", "any_of": ["trọng tài", "tòa án có thẩm quyền"]},
+    {"name": "bất khả kháng", "any_of": ["bất khả kháng", "force majeure"]},
+    {"name": "chấm dứt hợp đồng", "any_of": ["chấm dứt", "đơn phương chấm dứt"]},
+]
 
 
 _GRAPH_HTML = """<!doctype html><html lang="vi"><head><meta charset="utf-8">
@@ -140,6 +154,27 @@ async function load(){const d=await fetchGraph(eid.value);if(!d)return;
 #flt input{margin-right:.2rem}</style></body></html>"""
 
 
+_REVIEW_HTML = """<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<title>TraLuat — Rà soát</title><style>
+body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem}
+.f{padding:.4rem .6rem;border-radius:.3rem;margin:.3rem 0}
+.present{background:#dcfce7}.missing{background:#fee2e2;font-weight:600}
+textarea{width:100%}</style></head><body>
+<h1>Rà soát hợp đồng — điều khoản bỏ sót</h1>
+<p>Dán hợp đồng; hệ bắt điều khoản thiếu theo playbook (moat #2 omission).</p>
+<textarea id="t" rows="8" placeholder="dán hợp đồng...">Hợp đồng dịch vụ. Hai bên cam kết bảo mật thông tin. Tranh chấp giải quyết tại tòa án có thẩm quyền.</textarea>
+<p>Token: <input id="tok" size="36" placeholder="Bearer JWT"> <button onclick="go()">Rà soát</button></p>
+<div id="out"></div>
+<script>
+async function go(){out.innerHTML='...';
+ const r=await fetch('/review',{method:'POST',headers:{'Content-Type':'application/json',
+  'Authorization':'Bearer '+tok.value},body:JSON.stringify({text:t.value})});
+ if(!r.ok){out.textContent='Lỗi '+r.status;return;}
+ const d=await r.json();
+ out.innerHTML=d.map(f=>`<div class="f ${f.status}">${f.status==='present'?'✓':'⚠ THIẾU'} — ${f.rule}${f.evidence?' ('+f.evidence+')':''}</div>`).join('');}
+</script></body></html>"""
+
+
 def get_service() -> LegalService:   # placeholder — create_app/ test override
     raise RuntimeError("get_service chưa cấu hình")
 
@@ -161,6 +196,12 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         except jwt.PyJWTError:
             raise HTTPException(401, "token không hợp lệ")
 
+    def need(ctx: TenantContext, *roles: str) -> None:
+        try:
+            require_role(ctx, *roles)
+        except PermissionError as e:
+            raise HTTPException(403, str(e))
+
     @app.get("/health")
     def health():
         return {"status": "ok"}
@@ -176,6 +217,43 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     @app.get("/graph", response_class=HTMLResponse)
     def graph_view():                  # FR-37 — vẽ đồ thị quan hệ quy phạm (Cytoscape)
         return _GRAPH_HTML
+
+    @app.get("/doc")
+    def doc(frbr: str, as_of: str | None = None,
+            ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
+        # Điều hướng trích dẫn — VĂN BẢN TẠI NGÀY T (L12).
+        from ..w2 import repo
+        a = dt.date.fromisoformat(as_of) if as_of else dt.date.today()
+        return {"frbr": frbr, "as_of": a.isoformat(),
+                "text": repo.document_as_of(svc.s, frbr, a)}
+
+    @app.get("/review", response_class=HTMLResponse)
+    def review_page():                 # L12 — UI rà soát, highlight điều khoản bỏ sót
+        return _REVIEW_HTML
+
+    @app.post("/review")
+    def review(body: ReviewRequest, ctx: TenantContext = Depends(auth),
+               svc: LegalService = Depends(get_service)):  # noqa: ARG001
+        need(ctx, "lawyer", "reviewer", "owner")
+        from ..w6 import RequiredClauseRule, ReviewService
+        rules = [RequiredClauseRule(**r) for r in (body.rules or _DEFAULT_REVIEW_RULES)]
+        return [f.__dict__ for f in ReviewService().review(body.text, rules)]
+
+    @app.get("/review/queue")
+    def review_queue(ctx: TenantContext = Depends(auth),
+                     svc: LegalService = Depends(get_service)):
+        need(ctx, "reviewer", "owner")
+        from ..knowledge_ops import pending_relations
+        return [{"id": r.id, "type": r.relation_type, "confidence": r.confidence,
+                 "basis": r.confidence_basis} for r in pending_relations(svc.s)]
+
+    @app.post("/review/queue/{rel_id}/approve")
+    def review_approve(rel_id: int, ctx: TenantContext = Depends(auth),
+                       svc: LegalService = Depends(get_service)):
+        need(ctx, "reviewer", "owner")
+        from ..knowledge_ops import approve_relation
+        approve_relation(svc.s, rel_id)
+        return {"approved": rel_id}
 
     @app.get("/graph/central")
     def graph_central(ctx: TenantContext = Depends(auth)):
@@ -201,7 +279,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         svc: LegalService = Depends(get_service),
     ):
         try:
-            require_role(ctx, "lawyer", "reviewer", "owner")
+            need(ctx, "lawyer", "reviewer", "owner")
         except PermissionError as e:
             raise HTTPException(403, str(e))
         resp = svc.analyze(
