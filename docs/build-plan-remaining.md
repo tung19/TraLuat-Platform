@@ -5,7 +5,7 @@
 
 ---
 
-## WP1 — Hoàn thiện data-plane: calculators (FR-35) + directory/geo (FR-39/40)
+## WP1 — Data-plane: calculators (FR-35) ✅ · directory/geo (FR-39/40) ⏳ cần PostGIS
 **Mục tiêu:** 14 tiện ích tính + danh bạ LS/cơ quan, hiệu-lực-aware, RULE tier (không LLM).
 - **T1.1 Calculator registry** (`w1/calculators.py`): mỗi calc = hàm RULE trên `lookup_reference` (thuế/lương vùng/mức phạt/lệ phí/mã HS/ngành…) + số học; trả kết quả **kèm `source_eid`** (calculator-có-nguồn-luật). `classify_tier`→RULE route tới đây.
 - **T1.2 PostGIS geo** (FR-39): model `Directory(kind, name, address, geom POINT, phone, …)` + `nearby(lat,lon,radius)` KNN (`<->`). FR-40 danh bạ cơ quan (bảng thường).
@@ -13,7 +13,7 @@
 - **Test:** calc tax/penalty@as_of ra đúng số + source · nearby trả đúng bán kính · PII quarantine danh bạ.
 - **🔌 Cần-ngoài:** image Postgres có **cả pgvector + PostGIS** (đổi `pgvector/pgvector:pg16` → image gộp, hoặc cài postgis vào container) · **data thật** từ đội data (thuế suất/lương/mức phạt/danh bạ).
 
-## WP2 — Drafting & Templates: soạn đơn (FR-34) · biểu mẫu (FR-38) · Draft/Petition service (L9)
+## WP2 — Drafting & Templates (FR-34/38 · Draft/Petition service) ✅ XONG
 **Mục tiêu:** sinh đơn từ/biểu mẫu từ template, grounded, có nhãn AI.
 - **T2.1 Template store (TES)** (`w?/templates.py`): model `Template(kind, title, body, slots jsonb, embedding)` + retrieve (pgvector) theo loại việc. "Học từ template" = lưu exemplar đã duyệt (nối L14).
 - **T2.2 DraftService / PetitionDraftService** (`w6/workflows`): retrieve template phù hợp → `gateway.generate` điền slot **chỉ-từ-template + điều luật truy xuất** → `ground` (cite-or-abstain) → nhãn AI. Egress: dữ liệu khách → local.
@@ -21,7 +21,7 @@
 - **Test:** retrieve đúng template theo loại · draft điền slot + có trích dẫn · abstain khi thiếu căn cứ · form validate.
 - **🔌 Cần-ngoài:** API key (draft chất lượng cần Claude/local-LLM; stub Echo test luồng) · **template thật** (đội data/chuyên gia).
 
-## WP3 — Tam ngữ VN-EN-ZH (cross-lingual)
+## WP3 — Tam ngữ VN-EN-ZH (cross-lingual) ✅ XONG
 **Mục tiêu:** câu hỏi EN/ZH → đúng luật VN + trích dẫn cùng eId; trả lời render EN/ZH.
 - **T3.1 Cross-lingual retrieval**: bge-m3 **đã đa ngữ** → EN/ZH query vào cùng vector space, retrieve VN. Thêm **route embedding theo ngôn ngữ** + test cell "EN query → đúng điều VN".
 - **T3.2 Termbank** (dataset reference): cặp thuật ngữ VN-EN-ZH **neo điều–khoản** (alignment offline theo lô) → pgvector.
@@ -29,7 +29,7 @@
 - **Test:** EN query retrieve đúng eId VN · termbank lookup · conclusion-cache tái dùng, chỉ render đổi ngôn ngữ.
 - **🔌 Cần-ngoài:** termbank data · API key (render EN/ZH). ZH eval defer cùng ZH corpus.
 
-## WP4 — Experience/UI: review-UI · song-ngữ · điều hướng trích dẫn
+## WP4 — Experience/UI: review-UI · song-ngữ · điều hướng trích dẫn ✅ XONG
 **Mục tiêu:** luật sư *tiêu thụ* "việc đã xong" — trang phục vụ (single-file như `/graph`, hoặc SPA sau).
 - **T4.1 Review UI** (`/review`): upload/paste hợp đồng → `ReviewService` → **highlight điều khoản bỏ sót** (màu) + findings.
 - **T4.2 Citation navigation** (`/doc/{frbr}?as_of=`): click điều → **văn bản tại ngày T** (`document_as_of`) + effect_status badge.
