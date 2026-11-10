@@ -70,14 +70,22 @@ Phase 5  Diện rộng + Portability      ──►  nuốt thị trường + n�
 - `parse_structure` (Chương/Mục/Điều/Khoản/Điểm → cây eId ổn định) · `extract_metadata` (số VB/loại/cơ quan/ngày ký/hiệu lực; doc_type suy từ hậu tố) · `extract_effective_overrides` (phased-commencement cấp Điều/Khoản) · `extract_relations` (cue-phrase → amends/replaces/repeals/cites/guides).
 - `ingest_document` toàn trình (không cần tham số tay) · `load_relations_to_w2` → `norm_relation` **needs_review** → nối materialize gate (khép vòng data→W2).
 
-**W3 — Retrieval + Grounding (slice-1, TẤT ĐỊNH, chưa cần model) — XONG xương sống.**
-- `build_chunks` giữ-span zero-drift (span_text neo ≠ embed_text có header, M1) · `retrieve` keep-and-MARK effect_status@as_of (trả version-tại-ngày) · gates `gate1` tồn tại / `gate2` hiệu-lực@anchor (H3) / `gate3b` exactness số-ngày · `ground` **R1 sufficiency floor** (rỗng→abstain).
+**W3 — Retrieval + Grounding + Orchestration — XONG khung đầy đủ (lõi tất định + port cắm-được).**
+- Lõi tất định (chạy KHÔNG cần model): `build_chunks` giữ-span zero-drift (span_text neo ≠ embed_text có header, M1) · `retrieve` keep-and-MARK effect_status@as_of (trả version-tại-ngày) · gates `gate1`/`gate2` (H3)/`gate3b` exactness · `ground` **R1 sufficiency floor**.
+- **Port cắm-được + stub chạy ngay** (`w3/ports.py`): `LLMGateway`·`NLIVerifier`·`Embedder`·`Reranker`. `BaseLLMGateway` (guard tenant · wrap_untrusted X1 · cache content-hash theo tenant · audit · nhãn AI) + `EchoLLMGateway` (stub) + **`ClaudeLLMGateway`** (THẬT: Opus 5.5 + structured outputs; thiếu credential → `NotConfigured`). Stub: `HashEmbedder`/`NoopReranker`/`HoldNLI`.
+- **Orchestrator** `answer_question`: vòng `retrieve→generate→verify→sufficiency→abstain/answer` + caveat **R3** (pending repeal/replace/amend) + confidence (F10 placeholder) + effect_status@as_of.
+- **Eval harness** (`eval_harness.py`): `GoldCase`+`run_eval`+`EvalReport` 3-chiều + abstention 4-cell + Brier + `char_pr`. Gold set cắm vào là chạy.
+- **Data-plane adapter** (`w1/source.py`): `DocumentSource` Protocol + `ingest_source` batch (lỗi 1 VB không chặn mẻ). Đội data cắm API thật = implement `fetch()`.
 
-**CHƯA LÀM (cần model/API/gold — defer có chủ đích):**
-- W3: gate3 NLI · bge-m3 dense + BM25 tiếng Việt + RRF + rerank · L-MARS 6-lớp + Faith-Search · **LLMGateway** (swappable+cache+nhãn AI+guard tenant) · **eval harness** char-level + gold set.
-- W1: OCR (Vintern, chờ ảnh) · Phần/Tiểu mục trong parser (chờ VB mẫu).
-- W2: `authority_rank` 2025 official (chờ primary-text — `resolve_conflict` đang xài số **provisional**).
-- **Chặn ngoài** (mục NÊN-LÀM-NGAY #1,#2): 20–50 `meta.json` thật · primary-text authority_rank.
+**⚡ CẮM LÀ CHẠY (khung xong, chỉ chờ input ngoài — KHÔNG phải viết lại kiến trúc):**
+- **API key** → `ClaudeLLMGateway` call thật (đã có structured-output contract + abstain).
+- **bge-m3 + BM25 + rerank** → implement `Embedder`/`Reranker` port, hybrid blend vào `retrieve`.
+- **NLI model** → implement `NLIVerifier` (gate3 promote/hold — đã nối vào `ground`/orchestrator).
+- **20–50 `meta.json` + VB thật** → `JsonlFileSource`/`DocumentSource.fetch`, chốt W1 mapping.
+- **Gold set effectivity/omission/conflict** → `GoldCase` vào `run_eval`, bật CI gate.
+- **primary-text** → điền số `authority_rank` 2025 trong `legal_rule_base` (gỡ provisional).
+
+**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search repair · as_of_map đa-mốc/lex-mitior (§1b) · conflict DETECTION (FR-41, model+gold) · W4 reasoning · W5/W6 platform.
 
 ---
 
