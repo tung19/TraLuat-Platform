@@ -1,0 +1,97 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TraLuat — Cây phả hệ source (sau dọn kiến trúc)</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--line:#334155;--t:#e2e8f0;--mut:#94a3b8}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--t);padding:1.2rem}
+h1{font-size:1.35rem;margin:.2rem 0}.sub{color:var(--mut);font-size:.82rem;margin-bottom:1rem}
+.band{border:1px solid var(--line);border-radius:.7rem;padding:.6rem .8rem;margin:.5rem 0;background:var(--card);position:relative}
+.band.found{border-color:#64748b}
+.bh{display:flex;align-items:baseline;gap:.6rem;margin-bottom:.45rem;flex-wrap:wrap}
+.tag{font-weight:700;font-size:.92rem;padding:.1rem .5rem;border-radius:.35rem;color:#0f172a}
+.bh .d{color:var(--mut);font-size:.76rem}
+.mods{display:flex;flex-wrap:wrap;gap:.35rem}
+.m{font-family:ui-monospace,monospace;font-size:.71rem;padding:.18rem .45rem;border-radius:.3rem;background:#0f172a;border:1px solid var(--line);color:var(--t)}
+.m b{color:#fbbf24}
+.m.core{border-color:#16a34a}.m.ml{border-color:#2563eb}.m.sec{border-color:#b91c1c}.m.new{border-color:#fbbf24}
+.arrow{text-align:center;color:var(--mut);font-size:1.3rem;line-height:.6;margin:-.1rem 0}
+.w5band{background:linear-gradient(180deg,#1e3a5f,#1e293b)}
+.w2band{background:linear-gradient(180deg,#14532d33,#1e293b)}
+.legend{display:flex;gap:1rem;flex-wrap:wrap;font-size:.72rem;color:var(--mut);margin:.8rem 0}
+.legend span b{color:var(--t)}
+.dot{display:inline-block;width:.7rem;height:.7rem;border-radius:.2rem;border:1px solid;vertical-align:-1px;margin-right:.2rem}
+.dep{font-size:.72rem;color:var(--mut);margin-left:auto}
+.stats{display:flex;gap:1.1rem;flex-wrap:wrap;font-size:.8rem;margin:.6rem 0 1rem;color:var(--mut)}
+.stats b{color:#4ade80;font-size:1.05rem}
+.grp{font-size:.67rem;color:var(--mut);margin:.3rem .1rem .1rem;text-transform:uppercase;letter-spacing:.04em}
+.side{display:flex;gap:.5rem;flex-wrap:wrap;align-items:stretch}
+.side>.band{flex:1;min-width:230px;margin:.5rem 0}
+.note{font-size:.72rem;color:var(--mut)}
+</style></head><body>
+<h1>TraLuat — cây phả hệ source <span class="note">(sau 4 refactor dọn kiến trúc)</span></h1>
+<div class="sub">67 module · phụ thuộc 1 chiều (DAG, không vòng): W2 nền → W1·W3·tools → W4 → W6 → W5 biên. Mũi tên = "tầng trên gọi tầng dưới". core = cross-cutting.</div>
+
+<div class="stats">
+<span><b>264</b> test xanh</span><span><b>29</b> FR DONE</span><span><b>14/14</b> calculator</span><span><b>6/6</b> ràng buộc CN</span><span>api.py <b>367</b> dòng (facade mỏng)</span>
+</div>
+
+<!-- W5 -->
+<div class="band w5band"><div class="bh"><span class="tag" style="background:#60a5fa">W5 · Backend / API (16)</span><span class="d">biên ngoài — FastAPI facade, tenancy, bảo mật</span><span class="dep">→ chỉ gọi W6 + hạ tầng W5</span></div>
+<div class="grp">Facade mỏng</div><div class="mods">
+<span class="m"><b>api</b> (routing 24 route — KHÔNG logic)</span><span class="m new">pages (HTML tách riêng)</span><span class="m">asgi</span><span class="m core">service · LegalService (cổng DUY NHẤT vào W1-W6)</span></div>
+<div class="grp">Tenancy & bảo mật</div><div class="mods">
+<span class="m sec">tenancy·auth</span><span class="m sec">rls (FORCE RLS)</span><span class="m sec">crypto (KMS)</span><span class="m sec">egress (residency)</span><span class="m sec">audit (write-ahead)</span></div>
+<div class="grp">Vận hành</div><div class="mods">
+<span class="m">tasks·celery_app</span><span class="m">metrics</span><span class="m">tracing (OTel)</span><span class="m">alerts (FR-09)</span><span class="m">models</span></div></div>
+<div class="arrow">▲</div>
+
+<!-- W6 -->
+<div class="band"><div class="bh"><span class="tag" style="background:#c084fc">W6 · Workflow / Platform (2)</span><span class="d">dịch vụ nghiệp vụ</span><span class="dep">→ W1·W2·W3·W4·tools</span></div>
+<div class="mods">
+<span class="m">ReviewService (02/16)</span><span class="m">ComplianceDiffService (36)</span><span class="m">PetitionDraftService (34)</span><span class="m">JudgmentAnalysisService (03)</span><span class="m">ComplianceAdvisoryService (08)</span><span class="m">jurisdiction (26)</span></div></div>
+<div class="arrow">▲</div>
+
+<!-- W4 -->
+<div class="band"><div class="bh"><span class="tag" style="background:#f472b6">W4 · Reasoning (7)</span><span class="d">suy luận đa-vai, Auditor hard-gate</span><span class="dep">→ W2·W3</span></div>
+<div class="mods">
+<span class="m">reasoner (Researcher→Adjudicator)</span><span class="m">auditor (element-wise)</span><span class="m">multi_role</span><span class="m ml">element_judge (XNLI)</span><span class="m">precedent_store (CN-04)</span><span class="m">checkpoint</span><span class="m">types</span></div></div>
+<div class="arrow">▲</div>
+
+<!-- W3 -->
+<div class="band"><div class="bh"><span class="tag" style="background:#38bdf8">W3 · Retrieval / Grounding (14)</span><span class="d">truy xuất + cite-or-abstain</span><span class="dep">→ W2</span></div>
+<div class="grp">Vòng grounding</div><div class="mods">
+<span class="m">orchestrator</span><span class="m">retrieval (BM25+dense+RRF)</span><span class="m">grounding (3 cổng+NLI)</span><span class="m">chunker·indexer</span><span class="m">as_of·tier_router·routing</span><span class="m">conflict_detect (FR-41 deontic)</span></div>
+<div class="grp">Model ports (+ impl thật)</div><div class="mods">
+<span class="m">ports·stubs</span><span class="m">gateway</span><span class="m ml">embed_bge</span><span class="m ml">nli_xnli</span></div></div>
+<div class="arrow">▲ &nbsp; W1 & tools nạp/đọc W2 ▲</div>
+
+<!-- W1 + tools side by side -->
+<div class="side">
+<div class="band"><div class="bh"><span class="tag" style="background:#fb923c">W1 · Pipeline (10)</span><span class="d">ingest THUẦN</span><span class="dep">→ nạp W2</span></div>
+<div class="mods">
+<span class="m">acquisition (license-gate)</span><span class="m">structure·metadata·relations</span><span class="m">ingest·source</span><span class="m sec">anonymize (CN-05)</span><span class="m ml">ocr_vietocr·ocr_detect</span></div></div>
+<div class="band"><div class="bh"><span class="tag new" style="background:#fde047">tools · Reference-plane (9)</span><span class="d">tiện ích (TÁCH khỏi W1)</span><span class="dep">→ W2</span></div>
+<div class="mods">
+<span class="m">reference (PII gate)</span><span class="m">calculators (14 FR-35)</span><span class="m">deadlines·calendar_vn·lunar</span><span class="m">termbank</span><span class="m">forms (FR-38)</span><span class="m">templates·directory (PostGIS)</span></div></div>
+</div>
+<div class="arrow">▼ (W1·W3·W4·tools·core đều đọc-ghi qua đây)</div>
+
+<!-- W2 -->
+<div class="band w2band"><div class="bh"><span class="tag" style="background:#4ade80">W2 · Bitemporal core — NỀN (6)</span><span class="d">SoR — văn bản tại ngày T</span><span class="dep">rễ cái · đọc core.legal_rule_base (leaf)</span></div>
+<div class="mods">
+<span class="m core"><b>repo</b> (reconstruct_as_of · materialize-gate · multihop)</span><span class="m core">bitemporal (effect_status · GiST no-overlap)</span><span class="m core">models</span><span class="m">db</span><span class="m">graph·graph_neo4j (projection+GDS)</span></div></div>
+
+<!-- core -->
+<div class="band found"><div class="bh"><span class="tag new" style="background:#a3e635">core · Cross-cutting (3)</span><span class="d">xuyên tầng (GOM từ root)</span></div>
+<div class="mods">
+<span class="m">legal_rule_base (meta-rule thứ bậc — LEAF, W2 đọc)</span><span class="m">eval_harness (eval-gate · FR-27)</span><span class="m">knowledge_ops (flywheel duyệt→materialize · L14)</span></div></div>
+
+<div class="legend">
+<span><span class="dot" style="border-color:#16a34a"></span>core bitemporal</span>
+<span><span class="dot" style="border-color:#2563eb"></span>model ML thật</span>
+<span><span class="dot" style="border-color:#b91c1c"></span>bảo mật/compliance</span>
+<span><span class="dot" style="border-color:#fbbf24"></span>mới / vừa dọn</span>
+</div>
+<div class="sub"><b>Sau dọn (4 refactor):</b> ① tiện ích tách khỏi W1 → <code>tools</code> · ② HTML rời api.py → <code>pages</code> · ③ mọi endpoint qua <code>LegalService</code> (api.py không nhảy cóc tầng) · ④ cross-cutting gom vào <code>core</code>. Phụ thuộc 1 chiều, không vòng; mọi điểm-chờ-ngoài là Protocol port + stub.</div>
+</body></html>

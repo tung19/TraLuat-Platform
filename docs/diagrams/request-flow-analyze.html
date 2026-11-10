@@ -1,0 +1,61 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TraLuat — luồng /analyze</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--line:#334155;--t:#e2e8f0;--mut:#94a3b8}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--t);padding:1.2rem}
+h1{font-size:1.35rem;margin:.2rem 0}.sub{color:var(--mut);font-size:.82rem;margin-bottom:1rem}
+.step{border:1px solid var(--line);border-radius:.6rem;padding:.5rem .7rem;margin:.32rem 0;background:var(--card);display:flex;gap:.6rem;align-items:flex-start}
+.lyr{font-family:ui-monospace,monospace;font-size:.64rem;font-weight:700;padding:.12rem .4rem;border-radius:.3rem;color:#0f172a;flex:0 0 auto;margin-top:.1rem;min-width:30px;text-align:center}
+.w5{background:#60a5fa}.w4{background:#f472b6}.w3{background:#38bdf8}.w2{background:#4ade80}.w1{background:#fb923c}.sec{background:#f87171}
+.body2{flex:1}.ttl{font-weight:600;font-size:.9rem}.dsc{color:var(--mut);font-size:.76rem;margin-top:.1rem}
+.mono{font-family:ui-monospace,monospace;font-size:.72rem;color:#fbbf24}
+.arrow{text-align:center;color:#64748b;font-size:1.1rem;line-height:.5;margin:-.05rem 0}
+.gate{display:inline-block;font-family:ui-monospace,monospace;font-size:.68rem;background:#0f172a;border:1px solid #16a34a;border-radius:.3rem;padding:.08rem .35rem;margin:.12rem .2rem 0 0}
+.stop{border-color:#b91c1c;color:#fca5a5}
+.branch{border-left:3px solid #b91c1c;background:#2a1a1a;margin-left:2.5rem}
+.ret{border-left:3px solid #16a34a;background:#15291a}
+.n{color:#64748b;font-family:ui-monospace,monospace;font-size:.7rem;flex:0 0 1.4rem;text-align:right}
+.legend{display:flex;gap:.9rem;flex-wrap:wrap;font-size:.7rem;color:var(--mut);margin:.9rem 0}
+.legend b{color:var(--t)}
+</style></head><body>
+<h1>Luồng một request — <span class="mono">POST /analyze</span></h1>
+<div class="sub">Phân tích tình tiết vụ việc (dữ liệu khách). Mỗi bước ghi rõ tầng (W1-W5) + bất biến pháp lý. ⛔ = nhánh abstain/deny (fail-closed).</div>
+
+<div class="step"><span class="lyr sec">IN</span><span class="n">0</span><div class="body2"><div class="ttl">Request đến</div><div class="dsc"><span class="mono">{facts, as_of, parties}</span> + header <span class="mono">Authorization: Bearer JWT</span>. <b>as_of = ngày SỰ KIỆN</b> (không phải ngày hỏi).</div></div></div>
+<div class="arrow">▼</div>
+<div class="step"><span class="lyr w5">W5</span><span class="n">1</span><div class="body2"><div class="ttl">Auth → TenantContext</div><div class="dsc"><span class="mono">decode_context(JWT)</span> → <span class="mono">tenant_id, role, residency</span>. Thiếu tenant → <b>401</b>.</div></div></div>
+<div class="arrow">▼</div>
+<div class="step"><span class="lyr w5">W5</span><span class="n">2</span><div class="body2"><div class="ttl">RBAC · <span class="mono">need(lawyer/reviewer/owner)</span></div><div class="dsc">viewer → <b>403</b>. Ngày sai định dạng → <b>422</b> (parse_date).</div></div></div>
+<div class="arrow">▼</div>
+<div class="step"><span class="lyr w5">W5</span><span class="n">3</span><div class="body2"><div class="ttl">EgressPolicy — định tuyến dữ liệu (CN-01 residency)</div><div class="dsc"><b>I3:</b> tình tiết = <span class="mono">client-sensitive</span> LUÔN. classify provenance → decide đích. <b>B5:</b> local vLLM healthy? (health-probe, không tin client).</div></div></div>
+<div class="step branch"><span class="lyr sec">⛔</span><span class="n"></span><div class="body2"><div class="dsc"><b>R2 no-failover:</b> local DOWN → <span class="stop gate">destination = deny</span> → <span class="mono">abstain</span>, KHÔNG fallback ra Claude. (dữ liệu khách không rời VN)</div></div></div>
+<div class="arrow">▼ local OK → gateway = vLLM local</div>
+<div class="step"><span class="lyr sec">W5</span><span class="n">4</span><div class="body2"><div class="ttl">Audit write-ahead · <span class="mono">record_intent</span></div><div class="dsc">Ghi 'intent' TRƯỚC khi gọi model (NĐ 356 Đ29) → crash giữa chừng vẫn còn bằng chứng ở-lại-VN. + Prometheus metrics.</div></div></div>
+<div class="arrow">▼ &nbsp; <span class="mono" style="color:#94a3b8">span("service.analyze") — OTel</span></div>
+
+<div class="step"><span class="lyr w4">W4</span><span class="n">5</span><div class="body2"><div class="ttl">ReasoningEngine — Researcher (per-party)</div><div class="dsc">Thu bằng chứng, <b>CHƯA verify</b>. Uỷ W3 retrieve + mở rộng qua norm-graph (an toàn vì Auditor gác sau).</div></div></div>
+<div class="arrow">▼ gọi</div>
+<div class="step"><span class="lyr w3">W3</span><span class="n">6</span><div class="body2"><div class="ttl">Retrieve — hybrid, push-down SQL</div><div class="dsc"><span class="mono">BM25 + dense(bge-m3) → RRF</span>, lọc <b>as_of + tenant + lang</b> ngay trong SQL. Pin <span class="mono">known_as_of</span> (B1) → cả vòng thấy 1 snapshot.</div></div></div>
+<div class="arrow">▼ đọc</div>
+<div class="step"><span class="lyr w2">W2</span><span class="n">7</span><div class="body2"><div class="ttl">Bitemporal reconstruct — văn bản tại ngày T</div><div class="dsc"><span class="mono">reconstruct_as_of(eid, as_of, known)</span> — dựng lại text điều luật đúng hiệu lực tại thời điểm. <b>Rễ moat #1.</b></div></div></div>
+<div class="arrow">▲ ngữ cảnh (chunks)</div>
+<div class="step"><span class="lyr w3">W3</span><span class="n">8</span><div class="body2"><div class="ttl">Gateway.generate — model CHỈ từ ngữ cảnh</div><div class="dsc">vLLM local, <span class="mono">node=adjudicator</span>. Guard tenant + nhãn AI trong gateway. LLM KHÔNG được viện từ kiến thức tham số.</div></div></div>
+<div class="arrow">▼ draft + citations</div>
+<div class="step"><span class="lyr w3">W3</span><span class="n">9</span><div class="body2"><div class="ttl">Ground — cite-or-abstain (bất biến FR-05)</div><div class="dsc">Mỗi trích dẫn qua 3 cổng tất định:
+<span class="gate">gate1 · tồn tại</span><span class="gate">gate2 · hiệu-lực@anchor</span><span class="gate">gate3b · khớp số/ngày</span><span class="gate">gate3 · NLI (promote/hold, KHÔNG veto)</span>
+<br>Lọc trích-dẫn-ngoài-ngữ-cảnh. Rỗng sau lọc → <b>abstain</b>.</div></div></div>
+<div class="arrow">▼</div>
+<div class="step"><span class="lyr w4">W4</span><span class="n">10</span><div class="body2"><div class="ttl">Auditor — hard-gate element-wise</div><div class="dsc">Verify TỪNG yếu tố (3 cổng mỗi cái) + <span class="mono">prune_unsupported</span> (bỏ án lệ mất điểm tựa — CN-04). <b>verified ⊆ candidate.</b></div></div></div>
+<div class="step branch"><span class="lyr sec">⛔</span><span class="n"></span><div class="body2"><div class="dsc"><b>H1:</b> verified rỗng → <span class="stop gate">abstain: insufficient_basis</span> (thà im lặng còn hơn sai).</div></div></div>
+<div class="arrow">▼ Adjudicator: tổng hợp CHỈ trên verified</div>
+<div class="step"><span class="lyr sec">W5</span><span class="n">11</span><div class="body2"><div class="ttl">Audit confirm · <span class="mono">confirm("done")</span></div><div class="dsc">Khép vòng write-ahead.</div></div></div>
+<div class="arrow">▼</div>
+<div class="step ret"><span class="lyr w5">OUT</span><span class="n">12</span><div class="body2"><div class="ttl">Response (có nhãn AI bất biến)</div><div class="dsc"><span class="mono">{answered, ai_label 🤖, trace_id, route:{destination:local}, parties:[{citations, effect_status, relief, abstain}]}</span><br>Mỗi trích dẫn kèm <b>trạng thái hiệu lực</b>; không đủ căn cứ → abstain công khai. Nhãn AI = Luật 71/2025.</div></div></div>
+
+<div class="legend">
+<span><b>W5</b> Backend/API·bảo mật</span><span><b>W4</b> Reasoning</span><span><b>W3</b> Retrieval/Grounding</span><span><b>W2</b> Bitemporal core</span><span><b style="color:#fca5a5">⛔</b> fail-closed (abstain/deny)</span>
+</div>
+<div class="sub"><b>Bất biến xuyên suốt:</b> dữ liệu khách không rời VN (residency + no-failover) · mọi câu trả lời cite-or-abstain · nhãn AI · audit write-ahead · 1 snapshot/request. Câu hỏi thuần KB công (<span class="mono">/lookup</span>, <span class="mono">/summarize</span>) đi đường tương tự nhưng được ra Claude (đích duy nhất dữ liệu rời VN).</div>
+</body></html>
