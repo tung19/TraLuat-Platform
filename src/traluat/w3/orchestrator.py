@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from ..w2 import repo
 from ..w2.bitemporal import EffectStatus
+from .as_of import AsOfPlan, resolve_as_of
 from .grounding import GateResult, ground
 from .ports import LLMGateway, NLIVerifier
 from .retrieval import retrieve
@@ -53,10 +54,20 @@ def answer_question(
     lang: str = "vi",
     scope_frbr_uris: list[str] | None = None,
     top_k: int = 8,
+    extra_anchors: list[dt.date] | None = None,
+    plan_caveat: bool = False,
 ) -> Answer:
-    # 1) retrieve (keep-and-mark effect_status@as_of) — rỗng → abstain
-    cands = retrieve(session, query, as_of, lang=lang,
-                     scope_frbr_uris=scope_frbr_uris, top_k=top_k)
+    # 1) retrieve tại primary + các mốc phụ (§1b đa-mốc), hợp nhất theo eid (giữ
+    #    bản primary trước → text trích dẫn theo mốc chính). rỗng → abstain.
+    anchors = [as_of, *(extra_anchors or [])]
+    seen: dict[str, object] = {}
+    cands = []
+    for a in anchors:
+        for rc in retrieve(session, query, a, lang=lang,
+                           scope_frbr_uris=scope_frbr_uris, top_k=top_k):
+            if rc.unit_eid not in seen:
+                seen[rc.unit_eid] = rc
+                cands.append(rc)
     if not cands:
         return Answer.abstained("insufficient_retrieval", as_of)
 
@@ -72,8 +83,9 @@ def answer_question(
     if g.abstain:
         return Answer.abstained(g.reason, as_of, gates=g.gates)
 
-    # 4) R3: điều trích đang chờ quan hệ huỷ (repeals/replaces/amends) → caveat
-    caveat = any(repo.pending_destructive_relation(session, e) for e in g.supported_eids)
+    # 4) caveat: R3 (điều trích đang chờ quan hệ huỷ) HOẶC mốc không chắc (plan HITL)
+    caveat = plan_caveat or any(
+        repo.pending_destructive_relation(session, e) for e in g.supported_eids)
 
     passed = [gt for gt in g.gates if gt.passed]
     conf = len(passed) / len(g.gates)             # F10: placeholder, chưa calibrate
@@ -88,3 +100,30 @@ def answer_question(
         as_of=as_of, confidence=conf, caveat=caveat,
         ai_label=draft.ai_label, gates=g.gates,
     )
+
+
+def answer_with_resolution(
+    session: Session,
+    query: str,
+    *,
+    gateway: LLMGateway,
+    question_type: str = "general",
+    event_date: dt.date | None = None,
+    today: dt.date | None = None,
+    nli: NLIVerifier | None = None,
+    tenant_id: str | None = None,
+    lang: str = "vi",
+    scope_frbr_uris: list[str] | None = None,
+    top_k: int = 8,
+) -> tuple[Answer, AsOfPlan]:
+    """Giải mốc (event-date-first + lex-mitior) rồi trả lời. Verify tại mốc CHÍNH
+    (ngày sự kiện); mốc phụ (luật-nay cho hình sự) chỉ WIDEN retrieval để tầng sau
+    so favorability. plan.needs_human → caveat (mốc không chắc)."""
+    plan = resolve_as_of(query, question_type, event_date=event_date, today=today)
+    extras = [a for a in plan.anchors if a != plan.primary]
+    ans = answer_question(
+        session, query, as_of=plan.primary, gateway=gateway, nli=nli,
+        tenant_id=tenant_id, lang=lang, scope_frbr_uris=scope_frbr_uris,
+        top_k=top_k, extra_anchors=extras, plan_caveat=plan.needs_human,
+    )
+    return ans, plan

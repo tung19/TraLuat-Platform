@@ -20,7 +20,8 @@ from .gateway import (
     wrap_untrusted,
 )
 from .stubs import HashEmbedder, HoldNLI, NoopReranker
-from .orchestrator import Answer, answer_question
+from .as_of import AsOfPlan, resolve_as_of
+from .orchestrator import Answer, answer_question, answer_with_resolution
 
 __all__ = [
     "Chunk", "build_chunks",
@@ -30,5 +31,6 @@ __all__ = [
     "BaseLLMGateway", "ClaudeLLMGateway", "EchoLLMGateway", "NotConfigured",
     "TenantLeak", "wrap_untrusted",
     "HashEmbedder", "HoldNLI", "NoopReranker",
-    "Answer", "answer_question",
+    "AsOfPlan", "resolve_as_of",
+    "Answer", "answer_question", "answer_with_resolution",
 ]
