@@ -259,10 +259,12 @@ def citable_text(
     """
     known = known_as_of or dt.datetime.now(dt.timezone.utc)
     status = effect_status(s, eid, as_of, lang, known_as_of=known)
-    if status in (EffectStatus.IN_FORCE, EffectStatus.TRANSITIONAL_APPLIES):
+    if status == EffectStatus.IN_FORCE:
         return reconstruct_as_of(s, eid, as_of, lang, known_as_of=known), status
     if status == EffectStatus.ABSENT:
         return None, status
+    # TRANSITIONAL_APPLIES: bản đã hết covering nhưng còn áp qua điều khoản chuyển
+    # tiếp → cũng lấy bản in-force CUỐI trước as_of (reconstruct_as_of trả None).
 
     base = (
         sa.select(UnitVersion.text, UnitVersion.valid_from)

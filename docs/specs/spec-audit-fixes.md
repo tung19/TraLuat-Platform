@@ -128,6 +128,14 @@
 
 ---
 
+## Round 5 — REVIEW lát dọc đã-implement (W1→W2→W3 slice-1, Nov 2026)
+
+> Review code thật (không phải spec) sau 13 commit. 1 bug thật tìm+sửa, test khóa.
+- **🟠 `repo.citable_text` nuốt text chuyển tiếp:** `TRANSITIONAL_APPLIES` đi chung nhánh `IN_FORCE`→`reconstruct_as_of`, nhưng bản chuyển tiếp đã hết covering tại `as_of` → `reconstruct` trả `None` → **mất nguyên văn điều còn áp qua điều khoản chuyển tiếp** (vi phạm keep-and-mark §1/C3). **Sửa:** chỉ `IN_FORCE` dùng reconstruct; `TRANSITIONAL`+`EXPIRED` lấy bản in-force CUỐI trước `as_of`. Test: `test_citable_text_transitional_keeps_text`.
+- **Giữ (đúng):** gate2 không chặn `transitional_applies` · gate3b chặn sai-số thật (15≠30) · R1 rỗng→abstain · no-overlap do DB.
+
+---
+
 ## Thứ tự sửa (ship order)
 1. **W5 C1–C6** (rò tenant/egress = vi phạm pháp luật) + **W1 C1/C3** (gate materialize + ẩn danh) — *trước khi bất kỳ dữ liệu khách/bản án nào chạm hệ.*
 2. **W2 C1/C2 + W4 C1–C3** (bitemporal invariant + hard-gate đúng) — *trước khi tin kết quả truy xuất/suy luận.*

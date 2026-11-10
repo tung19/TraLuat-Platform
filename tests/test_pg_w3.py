@@ -12,6 +12,7 @@ from traluat.w1 import build_ingest, load_to_w2
 from traluat.w2 import repo
 from traluat.w2.bitemporal import EffectStatus
 from traluat.w2.db import make_engine
+from traluat.w2.models import Document, Unit, UnitVersion
 from traluat.w3 import build_chunks, ground, retrieve, verify_citation
 
 D = dt.date
@@ -98,3 +99,30 @@ def test_gate2_effectivity_and_sufficiency_floor(session: Session):
     assert ground(session, claim, D(2022, 1, 1), []).reason == "insufficient_retrieval"
     # gate1: eid không tồn tại → chặn
     assert ground(session, claim, D(2022, 1, 1), ["nd99__dieu_999"]).abstain
+
+
+def test_citable_text_transitional_keeps_text(session: Session):
+    # review-fix: bản chuyển tiếp đã hết covering vẫn phải TRÍCH ĐƯỢC text
+    # (trước fix: đi nhánh reconstruct_as_of → None, mất nguyên văn).
+    doc = Document(frbr_uri="trl:vn/l/1/2020", doc_type="luat",
+                   date_effective=D(2021, 1, 1), status="con_hieu_luc")
+    session.add(doc)
+    session.flush()
+    u = Unit(document_id=doc.id, parent_id=None, unit_type="dieu",
+             ordinal=1, label="Điều 1", eid="l1__dieu_1")
+    session.add(u)
+    session.flush()
+    session.add(UnitVersion(
+        unit_id=u.id, lang="vi", valid_from=D(2021, 1, 1), valid_to=D(2023, 1, 1),
+        text="Quy định cũ còn áp qua điều khoản chuyển tiếp.",
+        transitional=True, status="het_hieu_luc",
+    ))
+    session.flush()
+
+    text, status = repo.citable_text(session, "l1__dieu_1", D(2024, 1, 1))
+    assert status == EffectStatus.TRANSITIONAL_APPLIES
+    assert text == "Quy định cũ còn áp qua điều khoản chuyển tiếp."
+    # keep-and-mark: trích được + áp dụng được (gate2 không chặn chuyển tiếp)
+    g = ground(session, "Quy định cũ còn áp qua điều khoản chuyển tiếp.",
+               D(2024, 1, 1), ["l1__dieu_1"])
+    assert not g.abstain and g.gates[0].gate2_effective is True

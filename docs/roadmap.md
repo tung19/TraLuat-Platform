@@ -57,6 +57,30 @@ Phase 5  Diện rộng + Portability      ──►  nuốt thị trường + n�
 
 ---
 
+## ✅ ĐÃ IMPLEMENT (lát dọc W1→W2→W3, 13 commit, 48 test xanh)
+
+> Trạng thái code tới commit `d777103`. Lõi `src/traluat/` + `tests/`. DB: Postgres 16 qua docker-compose (`traluat-pg:5433`), bất biến do GiST EXCLUDE gác.
+
+**W2 — Bitemporal "văn bản tại ngày T" (moat #1) — XONG lõi.**
+- `reconstruct_as_of` · `document_as_of` (ghép cây theo parent_id) · `effect_status` enum (in_force·expired_citable·transitional_applies·not_yet·absent) · `citable_text` (keep-and-mark).
+- `apply_amendment` interval-split + idempotent + same-date fold · `repeal` · `materialize` **gate** (approved OR auto-safe≥θ; repeals/replaces/amends KHÔNG auto) · `resolve_conflict` (hiệu-lực-gate → lex superior → lex posterior → abstain) · `correct_valid_from` (R5 tx-time) · `multihop` (CTE bounded-hop, cycle-guard).
+- Bất biến **no-overlap do DB** (`uv_no_overlap` GiST EXCLUDE) — không phải app gác.
+
+**W1 — Data pipeline (text thô → W2) — XONG 4 slice.**
+- `parse_structure` (Chương/Mục/Điều/Khoản/Điểm → cây eId ổn định) · `extract_metadata` (số VB/loại/cơ quan/ngày ký/hiệu lực; doc_type suy từ hậu tố) · `extract_effective_overrides` (phased-commencement cấp Điều/Khoản) · `extract_relations` (cue-phrase → amends/replaces/repeals/cites/guides).
+- `ingest_document` toàn trình (không cần tham số tay) · `load_relations_to_w2` → `norm_relation` **needs_review** → nối materialize gate (khép vòng data→W2).
+
+**W3 — Retrieval + Grounding (slice-1, TẤT ĐỊNH, chưa cần model) — XONG xương sống.**
+- `build_chunks` giữ-span zero-drift (span_text neo ≠ embed_text có header, M1) · `retrieve` keep-and-MARK effect_status@as_of (trả version-tại-ngày) · gates `gate1` tồn tại / `gate2` hiệu-lực@anchor (H3) / `gate3b` exactness số-ngày · `ground` **R1 sufficiency floor** (rỗng→abstain).
+
+**CHƯA LÀM (cần model/API/gold — defer có chủ đích):**
+- W3: gate3 NLI · bge-m3 dense + BM25 tiếng Việt + RRF + rerank · L-MARS 6-lớp + Faith-Search · **LLMGateway** (swappable+cache+nhãn AI+guard tenant) · **eval harness** char-level + gold set.
+- W1: OCR (Vintern, chờ ảnh) · Phần/Tiểu mục trong parser (chờ VB mẫu).
+- W2: `authority_rank` 2025 official (chờ primary-text — `resolve_conflict` đang xài số **provisional**).
+- **Chặn ngoài** (mục NÊN-LÀM-NGAY #1,#2): 20–50 `meta.json` thật · primary-text authority_rank.
+
+---
+
 ## Phase 0 — Nền dữ liệu hiệu lực (moat lõi, làm TRƯỚC mọi thứ)
 
 **Vì sao trước:** không có tầng này thì mọi tính năng phía trên chỉ là LLM rà hợp đồng chung chung — đúng cái thị trường đã có và đang bị chê.
