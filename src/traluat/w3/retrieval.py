@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from ..w2.bitemporal import EffectStatus
-from ..w2.models import Document
+from ..w2.models import Chunk as ChunkRow, Document
 from .chunker import Chunk, build_chunks
 
 _APPLICABLE = {EffectStatus.IN_FORCE, EffectStatus.TRANSITIONAL_APPLIES}
@@ -90,3 +90,57 @@ def retrieve(
 
     scored.sort(key=lambda r: (r.applicable, r.score, r.unit_eid), reverse=True)
     return scored[:top_k]
+
+
+def _row_to_rc(row: ChunkRow, as_of: dt.date, score: float) -> RetrievedChunk:
+    applicable = row.valid_to is None or as_of < row.valid_to
+    status = EffectStatus.IN_FORCE if applicable else EffectStatus.EXPIRED_CITABLE
+    ch = Chunk(unit_eid=row.eid, lang=row.lang, struct_header=row.struct_header,
+               span_text=row.span_text, effect_status=status, as_of=as_of)
+    return RetrievedChunk(chunk=ch, score=score, applicable=applicable)
+
+
+def retrieve_indexed(
+    session: Session, query: str, as_of: dt.date, *,
+    lang: str = "vi", namespaces: tuple[str, ...] = ("kb",), top_k: int = 8,
+    embedder=None, rrf_c: int = 60,
+) -> list[RetrievedChunk]:
+    """L4-backed retrieval — PUSH-DOWN as_of+namespace+lang trong SQL, rồi HYBRID
+    BM25 (ts_rank_cd) + dense (pgvector cosine) → RRF. Keep-and-mark: giữ cả expired
+    (valid_to≤as_of) nhưng hạ ưu tiên (applicable=False). namespaces = ('kb',) hoặc
+    + 'tenant:<id>' — KHÔNG trộn tenant khác."""
+    # ① push-down predicate (rẻ, giảm candidate TRƯỚC vector/rank)
+    scope = sa.and_(
+        ChunkRow.lang == lang, ChunkRow.namespace.in_(namespaces),
+        ChunkRow.valid_from <= as_of)
+    wide = top_k * 5
+
+    # ② BM25 (FTS 'simple')
+    tsq = sa.func.plainto_tsquery("simple", query)
+    bm = session.execute(
+        sa.select(ChunkRow, sa.func.ts_rank_cd(ChunkRow.tsv, tsq).label("r"))
+        .where(scope, ChunkRow.tsv.op("@@")(tsq))
+        .order_by(sa.desc("r")).limit(wide)).all()
+
+    # ③ dense (pgvector cosine) — chỉ khi có embedder + embedding đã index
+    dense = []
+    if embedder is not None:
+        qv = embedder.embed([query])[0]
+        dense = session.execute(
+            sa.select(ChunkRow, ChunkRow.embedding.cosine_distance(qv).label("d"))
+            .where(scope, ChunkRow.embedding.is_not(None))
+            .order_by(sa.asc("d")).limit(wide)).all()
+
+    # ④ RRF fuse theo id (1/(c+rank) mỗi danh sách)
+    rrf: dict[int, float] = {}
+    rows: dict[int, ChunkRow] = {}
+    for rank, (row, _) in enumerate(bm):
+        rrf[row.id] = rrf.get(row.id, 0.0) + 1.0 / (rrf_c + rank)
+        rows[row.id] = row
+    for rank, (row, _) in enumerate(dense):
+        rrf[row.id] = rrf.get(row.id, 0.0) + 1.0 / (rrf_c + rank)
+        rows[row.id] = row
+
+    out = [_row_to_rc(rows[i], as_of, s) for i, s in rrf.items()]
+    out.sort(key=lambda r: (r.applicable, r.score, r.unit_eid), reverse=True)
+    return out[:top_k]

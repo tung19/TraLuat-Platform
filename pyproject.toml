@@ -9,6 +9,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "fastapi>=0.162.2",
     "pyjwt>=2.8",
+    "pgvector>=0.3",
 ]
 
 [project.optional-dependencies]

@@ -12,9 +12,11 @@ pytest.importorskip("sentence_transformers")
 
 from sqlalchemy.orm import Session  # noqa: E402
 
+import sqlalchemy as sa  # noqa: E402
+
 from traluat.w1 import build_ingest, load_to_w2  # noqa: E402
 from traluat.w2.db import make_engine  # noqa: E402
-from traluat.w3 import retrieve  # noqa: E402
+from traluat.w3 import reindex_document, retrieve, retrieve_indexed  # noqa: E402
 from traluat.w3.embed_bge import BgeM3Embedder  # noqa: E402
 
 D = dt.date
@@ -68,3 +70,13 @@ def test_dense_finds_what_lexical_misses(session: Session, embedder):
     dense_top = [r.unit_eid for r in dense[:3]]
     assert "nd99__dieu_3__khoan_2" not in lex_eids      # lexical bỏ lỡ (0 overlap)
     assert "nd99__dieu_3__khoan_2" in dense_top         # dense bắt được (ngữ nghĩa)
+
+
+def test_indexed_dense_via_pgvector(session: Session, embedder):
+    # L4: reindex embed theo lô → retrieve_indexed dùng HNSW pgvector (không per-query embed corpus)
+    if session.execute(sa.text("select to_regclass('public.chunk')")).scalar() is None:
+        pytest.skip("bảng chunk chưa migrate")
+    reindex_document(session, FRBR, embedder=embedder)
+    res = retrieve_indexed(session, "cần bao nhiêu tiền để thành lập công ty",
+                           D(2022, 1, 1), embedder=embedder)
+    assert "nd99__dieu_3__khoan_2" in {r.unit_eid for r in res[:3]}   # dense HNSW bắt ngữ nghĩa

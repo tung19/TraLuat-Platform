@@ -14,7 +14,8 @@ from __future__ import annotations
 import datetime as dt
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import ExcludeConstraint
+from pgvector.sqlalchemy import Vector
+from sqlalchemy.dialects.postgresql import ExcludeConstraint, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -114,6 +115,43 @@ class NormRelation(Base):
     )
 
 
-# DDL phụ thuộc: btree_gist phải có TRƯỚC khi tạo uv_no_overlap.
-BTREE_GIST = sa.DDL("CREATE EXTENSION IF NOT EXISTS btree_gist")
-sa.event.listen(Base.metadata, "before_create", BTREE_GIST.execute_if(dialect="postgresql"))
+class Chunk(Base):
+    """L4 — index phái sinh (rebuild được từ L3), PERSISTED. Không phải nguồn sự thật.
+
+    span_text = nguyên văn neo (== citable_text@as_of); embedding = bge-m3 (null tới
+    khi reindex có model). valid_from/to denormalized từ L3 để PUSH-DOWN as_of trong
+    SQL. namespace = 'kb' (luật công) | 'tenant:<id>' (dữ liệu khách) → cô lập + filter.
+    tsv = FTS 'simple' (BM25-ish qua ts_rank). source_version → idempotent upsert + cache.
+    """
+
+    __tablename__ = "chunk"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    unit_id: Mapped[int] = mapped_column(sa.ForeignKey("unit.id"), index=True)
+    eid: Mapped[str] = mapped_column(index=True)
+    lang: Mapped[str] = mapped_column(default="vi")
+    namespace: Mapped[str] = mapped_column(default="kb")
+    struct_header: Mapped[str]
+    span_text: Mapped[str]
+    char_from: Mapped[int] = mapped_column(default=0)
+    char_to: Mapped[int] = mapped_column(default=0)
+    valid_from: Mapped[dt.date]
+    valid_to: Mapped[dt.date | None]
+    source_version: Mapped[str] = mapped_column(default="v1")
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
+    tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR, sa.Computed("to_tsvector('simple', span_text)", persisted=True))
+
+    __table_args__ = (
+        sa.UniqueConstraint("eid", "lang", "source_version", "namespace", name="uq_chunk_ver"),
+        sa.Index("ix_chunk_scope", "namespace", "valid_from", "valid_to"),
+        sa.Index("ix_chunk_tsv", "tsv", postgresql_using="gin"),
+        sa.Index("ix_chunk_hnsw", "embedding", postgresql_using="hnsw",
+                 postgresql_ops={"embedding": "vector_cosine_ops"}),
+    )
+
+
+# DDL phụ thuộc: extension phải có TRƯỚC khi tạo index/constraint dùng chúng.
+for _ext in ("btree_gist", "vector", "pg_trgm"):
+    sa.event.listen(
+        Base.metadata, "before_create",
+        sa.DDL(f"CREATE EXTENSION IF NOT EXISTS {_ext}").execute_if(dialect="postgresql"))

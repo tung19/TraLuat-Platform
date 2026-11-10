@@ -10,7 +10,8 @@ Defer (cắm là chạy): bge-m3 dense + BM25 + RRF + rerank · gate3 NLI thật
 """
 
 from .chunker import Chunk, build_chunks
-from .retrieval import RetrievedChunk, retrieve
+from .retrieval import RetrievedChunk, retrieve, retrieve_indexed
+from .indexer import reindex_document
 from .grounding import GateResult, GroundingResult, ground, verify_citation
 from .ports import (
     Citation, Embedder, LLMGateway, LLMResult, NLIVerifier, Reranker,
@@ -29,7 +30,7 @@ from .orchestrator import Answer, answer_question, answer_with_resolution
 
 __all__ = [
     "Chunk", "build_chunks",
-    "RetrievedChunk", "retrieve",
+    "RetrievedChunk", "retrieve", "retrieve_indexed", "reindex_document",
     "GateResult", "GroundingResult", "ground", "verify_citation",
     "Citation", "Embedder", "LLMGateway", "LLMResult", "NLIVerifier", "Reranker",
     "BaseLLMGateway", "ClaudeLLMGateway", "EchoLLMGateway", "NotConfigured",
