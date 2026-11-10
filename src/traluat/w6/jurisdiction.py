@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass, field
 
-from .. import legal_rule_base as lrb
+from ..core import legal_rule_base as lrb
 from ..w4.multi_role import DEFAULT_ROLES, RoleConfig
 
 

@@ -7,7 +7,7 @@ import datetime as dt
 import pytest
 from sqlalchemy.orm import Session
 
-from traluat.eval_harness import GoldCase, run_eval
+from traluat.core.eval_harness import GoldCase, run_eval
 from traluat.w1 import build_ingest, load_to_w2
 from traluat.w2.db import make_engine
 from traluat.w3 import EchoLLMGateway, answer_question

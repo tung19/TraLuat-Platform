@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from .. import legal_rule_base as lrb
+from ..core import legal_rule_base as lrb
 from .bitemporal import BitemporalCorruption, EffectStatus
 from .models import Document, NormRelation, Unit, UnitVersion
 

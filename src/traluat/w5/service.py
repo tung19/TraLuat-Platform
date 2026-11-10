@@ -236,9 +236,9 @@ class LegalService:
         return dict(gds_pagerank(driver))
 
     def review_queue(self):
-        from ..knowledge_ops import pending_relations
+        from ..core.knowledge_ops import pending_relations
         return pending_relations(self.s)
 
     def approve_relation(self, rel_id: int):
-        from ..knowledge_ops import approve_relation
+        from ..core.knowledge_ops import approve_relation
         approve_relation(self.s, rel_id)

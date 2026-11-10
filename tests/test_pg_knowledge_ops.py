@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy.orm import Session
 
-from traluat.eval_harness import GoldCase, load_gold
-from traluat.knowledge_ops import append_gold, approve_relation, pending_relations
+from traluat.core.eval_harness import GoldCase, load_gold
+from traluat.core.knowledge_ops import append_gold, approve_relation, pending_relations
 from traluat.w1 import build_ingest, extract_and_load_relations, load_to_w2
 from traluat.w2 import repo
 from traluat.w2.db import make_engine

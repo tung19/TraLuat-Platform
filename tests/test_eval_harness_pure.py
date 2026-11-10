@@ -1,6 +1,6 @@
 """Eval harness — metric cấp ký tự (pure)."""
 
-from traluat.eval_harness import char_pr
+from traluat.core.eval_harness import char_pr
 
 
 def test_char_pr_overlap():

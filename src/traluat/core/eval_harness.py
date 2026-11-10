@@ -19,7 +19,7 @@ from typing import Callable
 
 from sqlalchemy.orm import Session
 
-from .w3 import Answer
+from ..w3 import Answer
 
 
 @dataclass

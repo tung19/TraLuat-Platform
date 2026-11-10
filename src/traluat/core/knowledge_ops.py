@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from .eval_harness import GoldCase
-from .w2.models import NormRelation
+from ..w2.models import NormRelation
 
 
 def pending_relations(session: Session, *, limit: int = 100) -> list[NormRelation]:
