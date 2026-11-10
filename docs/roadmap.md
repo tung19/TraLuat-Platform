@@ -99,7 +99,12 @@ Phase 5  Diện rộng + Portability      ──►  nuốt thị trường + n�
 **W5 FastAPI infra-lift — XONG.** `api.create_app` (POST /analyze, /health) · JWT→TenantContext (thiếu tenant→401) · RBAC require_role (viewer→403) · `rls.py` (C2: ENABLE+FORCE RLS + policy, `set_tenant` SQLi-safe) sẵn áp cho bảng khách. Celery/SSE/nginx cắm quanh sau.
 **W6 JurisdictionPack — XONG slice-1 (portability).** `JurisdictionPack` (rank_table · roles · ambiguous_types) + registry + `load_pack` (JSON). `resolve_conflict(rank_fn=...)` + `find_and_resolve_conflicts(pack=...)` bơm thang bậc theo vùng → winner xung đột đổi theo pack, **engine không đổi** (mở đường nước thứ 2).
 
-**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search · conflict ngữ-nghĩa (NLI) · durable checkpointer Postgres cho đa vai (resume) · eval gold set (chuyên gia label) · W5 Celery/SSE + migration tenant tables · W6 workflow UI/frontend.
+**ML ports + durable + eval-gate — XONG khung (ready-to-plug).**
+- NLI gate3 (`KeywordNLIVerifier` stub + wiring vào `ground`), OCR (`OCREngine` port + stub + `ingest_source(ocr=)`), conflict ngữ-nghĩa (`SemanticConflictDetector` port + wiring). Impl thật = cắm model vào port, không đụng lõi.
+- Durable checkpointer (`InMemory/PostgresCheckpointer`, C3 prefix tenant) → `MultiRoleReasoner.run(checkpointer=)` resume không audit lại.
+- Eval: `load_gold` (JSONL) + `EvalReport.gate` (CI fail-safe) + `eval/gold/smoke.jsonl`.
+
+**CHƯA CÓ KHUNG (net-new, cần model/UI/chuyên gia):** impl model thật cho các port (ViLegalBERT/LLM-NLI · Vintern OCR · contradiction model · bge-m3/BM25/rerank · ClaudeLLMGateway call thật) · **gold moat thật** (effectivity/omission/conflict — chuyên gia label) · L-MARS 6-lớp + Faith-Search repair · W5 Celery/SSE + migration tenant tables + RLS áp thật · W6 workflow UI/frontend · chốt `authority_rank` 2025 từ primary-text.
 
 ---
 

@@ -11,8 +11,10 @@ char-level P/R (port legalbenchrag) có ở `char_pr` cho gold dạng span ký t
 from __future__ import annotations
 
 import datetime as dt
+import json
 from collections import defaultdict
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 from sqlalchemy.orm import Session
@@ -100,6 +102,23 @@ class EvalReport:
         return sum((r.confidence - (1.0 if (r.recall or 0) >= 1.0 else 0.0)) ** 2
                    for r in scored) / len(scored)
 
+    def gate(self, min_recall: dict[str, float] | None = None) -> tuple[bool, list[str]]:
+        """Cổng CI (fail-safe). Fail nếu: trả lời ca BẪY · abstain ca đáng-trả ·
+        recall[tag] dưới ngưỡng. Trả (pass, danh sách lý do fail)."""
+        failures: list[str] = []
+        cells = self.abstention_cells()
+        if cells["answer_when_should_abstain"]:
+            failures.append(f"trả lời {cells['answer_when_should_abstain']} ca bẫy")
+        if cells["abstain_when_should_answer"]:
+            failures.append(f"abstain {cells['abstain_when_should_answer']} ca đáng-trả")
+        if min_recall:
+            bt = self.by_tag()
+            for tag, thr in min_recall.items():
+                r = bt.get(tag, {}).get("recall")
+                if r is None or r < thr:
+                    failures.append(f"recall[{tag}]={r} < {thr}")
+        return (not failures, failures)
+
     def summary(self) -> str:
         lines = ["— EVAL REPORT —", f"cases: {len(self.results)}"]
         for tag, m in sorted(self.by_tag().items()):
@@ -110,6 +129,27 @@ class EvalReport:
         b = self.brier()
         lines.append(f"brier: {'—' if b is None else f'{b:.3f}'}")
         return "\n".join(lines)
+
+
+def load_gold(path: str | Path) -> list[GoldCase]:
+    """Nạp gold set từ JSONL (1 case/dòng). Dòng rỗng / bắt đầu '#' → bỏ qua.
+
+    Gold moat thật (effectivity/omission/conflict) do chuyên gia label; đây chỉ là
+    loader + schema. {case_id, query, as_of(ISO), gold_eids, required_eids,
+    expect_abstain, tags}."""
+    cases: list[GoldCase] = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        d = json.loads(line)
+        cases.append(GoldCase(
+            case_id=d["case_id"], query=d["query"],
+            as_of=dt.date.fromisoformat(d["as_of"]),
+            gold_eids=d.get("gold_eids", []), required_eids=d.get("required_eids", []),
+            expect_abstain=d.get("expect_abstain", False), tags=d.get("tags", []),
+        ))
+    return cases
 
 
 def run_eval(

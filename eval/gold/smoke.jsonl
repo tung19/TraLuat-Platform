@@ -1,0 +1,4 @@
+# SMOKE eval set — synthetic trên nd99, CHỈ để kiểm khung harness/CI gate.
+# KHÔNG phải gold moat thật (effectivity/omission/conflict cần chuyên gia label).
+{"case_id": "s1", "query": "vốn pháp định tối thiểu của doanh nghiệp", "as_of": "2022-01-01", "gold_eids": ["nd99__dieu_3__khoan_2"], "tags": ["correct-article"]}
+{"case_id": "s2", "query": "qwxz zzzq kkkplm khong co", "as_of": "2022-01-01", "expect_abstain": true, "tags": ["trap"]}
