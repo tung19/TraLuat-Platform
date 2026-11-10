@@ -83,6 +83,38 @@ class NoSemantic:
         return []
 
 
+# Dấu hiệu DEONTIC (nghĩa vụ/cho phép/cấm) — xếp CẤM trước (vì 'không được phép' chứa
+# 'được phép'). Bắt mâu thuẫn rõ: một bên CHO PHÉP, bên kia CẤM cùng chủ đề.
+_FORBID = ("nghiêm cấm", "bị cấm", "không được phép", "không cho phép", "không được",
+           "cấm", "không có quyền")
+_ALLOW = ("được phép", "cho phép", "có quyền", "được quyền")
+
+
+def deontic_polarity(text: str) -> str | None:
+    """'allow' | 'forbid' | None (trung tính/không rõ). Tất định, ưu tiên CẤM."""
+    low = unicodedata.normalize("NFC", text).lower()
+    if any(m in low for m in _FORBID):
+        return "forbid"
+    if any(m in low for m in _ALLOW):
+        return "allow"
+    return None
+
+
+class DeonticConflictDetector:
+    """Impl THẬT (tất định) của SemanticConflictDetector — cờ cặp cùng chủ đề có cực
+    deontic ĐỐI NGHỊCH (cho phép ↔ cấm). KHÔNG dùng model; bắt mâu thuẫn rõ-ràng.
+    Mâu thuẫn ngữ-nghĩa tinh-vi hơn (hàm ý, điều kiện) vẫn cần NLI (cắm cùng port)."""
+
+    def detect(self, pairs: list[tuple[str, str, str, str]]) -> list[ConflictCandidate]:
+        out = []
+        for eid_a, ta, eid_b, tb in pairs:
+            pa, pb = deontic_polarity(ta), deontic_polarity(tb)
+            if pa and pb and pa != pb:
+                out.append(ConflictCandidate(
+                    eid_a, eid_b, "semantic", f"deontic: {pa} vs {pb}"))
+        return out
+
+
 def detect_conflicts(
     session: Session, scope_frbr_uris: list[str], as_of: dt.date, *,
     min_topic_overlap: int = 2, lang: str = "vi", semantic: SemanticConflictDetector | None = None,
