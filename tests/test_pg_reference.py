@@ -54,6 +54,15 @@ def test_effectivity_aware_lookup_with_source(session: Session):
     assert _count(session) == 2
 
 
+def test_pii_check_off_for_numeric_dataset(session: Session):
+    # A2-fix: dataset SỐ (muc_phat) đặt pii_check=False → số tiền 12 chữ số KHÔNG bị
+    # quarantine oan (100 tỷ ≈ CCCD về regex).
+    out = upsert_reference(session, "muc_phat",
+                           [RefRow("x", {"muc": 100_000_000_000}, D(2020, 1, 1))],
+                           pii_check=False)
+    assert out.loaded == 1 and out.quarantined == []
+
+
 def test_pii_gate_quarantines(session: Session):
     out = upsert_reference(session, "danh_ba", [
         RefRow("cb_ok", {"co_quan": "Sở KHĐT Hà Nội"}, D(2020, 1, 1)),

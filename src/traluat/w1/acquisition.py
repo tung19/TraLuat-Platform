@@ -64,7 +64,8 @@ class LicenseGate:
         self.blocked = blocked or BLOCKED_HOSTS
 
     def check(self, blob: AcquiredBlob) -> tuple[bool, str]:
-        host = urlparse(blob.source_url).netloc.lower().lstrip("www.") if blob.source_url else ""
+        # removeprefix (KHÔNG lstrip — lstrip xoá mọi ký tự w/. : 'worldbank'→'orldbank').
+        host = urlparse(blob.source_url).netloc.lower().removeprefix("www.") if blob.source_url else ""
         if host in self.blocked:
             return False, f"aggregator bị chặn (ToS): {host}"
         if blob.source_url and host not in self.official:

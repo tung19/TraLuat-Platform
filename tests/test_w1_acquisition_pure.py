@@ -30,3 +30,9 @@ def test_dedup_by_content_hash():
 def test_unknown_url_host_rejected():
     out = acquire(_Conn([AcquiredBlob("x", "https://random-site.com/a", b"z")]))
     assert out.accepted == [] and "chính thức" in out.rejected[0][1]
+
+
+def test_www_prefix_official_allowed():
+    # A1-fix: removeprefix('www.') đúng — www.vbpl.vn → vbpl.vn (chính thức)
+    out = acquire(_Conn([AcquiredBlob("vbpl", "https://www.vbpl.vn/x", b"z")]))
+    assert len(out.accepted) == 1

@@ -51,12 +51,17 @@ class RefOutcome:
 
 def upsert_reference(
     session: Session, dataset: str, rows: list[RefRow], *, version: str = "v1",
+    pii_check: bool = True,
 ) -> RefOutcome:
-    """Nạp 1 mẻ reference. PII → quarantine (không upsert). Idempotent theo khoá."""
+    """Nạp 1 mẻ reference. PII → quarantine (không upsert). Idempotent theo khoá.
+
+    pii_check: dataset SỐ (muc_phat/thue — giá trị tiền nhiều chữ số) đặt False để
+    tránh false-positive (số tiền 12 chữ số ≈ CCCD). Dataset có liên hệ (danh bạ) giữ True.
+    """
     out = RefOutcome()
     for r in rows:
         blob = r.key + " " + json.dumps(r.value, ensure_ascii=False)
-        if has_pii(blob):
+        if pii_check and has_pii(blob):
             out.quarantined.append(r.key)   # F5: giữ lại, không đổ vào store
             continue
         stmt = pg_insert(ReferenceValue).values(

@@ -159,6 +159,16 @@
 
 ---
 
+## Round 8 — REVIEW batch L1/L14/Celery/crypto/reference/obs (Nov 2026)
+
+> Soát code mới (phần "làm nốt chờ-ngoài"). 2 bug thật tìm+sửa, probe xác nhận phần còn lại, ghi known-limitation.
+- **🟠 A1 — LicenseGate `lstrip("www.")` cắt sai:** `lstrip` xoá MỌI ký tự trong {w,.} ở đầu → 'worldbank.org'→'orldbank.org'. **Sửa:** `removeprefix("www.")`. (Fail-closed allowlist che được hậu quả, nhưng logic sai.) Test `test_www_prefix_official_allowed`.
+- **🟠 A2 — PII gate quarantine OAN số tiền 12 chữ số:** `\b\d{12}\b` khớp cả 100 tỷ (12 số) ≈ CCCD → dataset `muc_phat`/`thue` mất dữ liệu thật. **Sửa:** `upsert_reference(pii_check=...)` — dataset số đặt False (giữ True cho danh-bạ). Test `test_pii_check_off_for_numeric_dataset`.
+- **Probe xác nhận ĐÚNG:** celery run_task_body (set tenant TRƯỚC khi đọc, RLS chặn tenant sai) · crypto roundtrip/shred · acquire dedup/official · knowledge_ops approve→materialize.
+- **Known-limitation:** `approve_relation` chưa ghi reviewer/chữ-ký (spec muốn) — thêm audit khi có reviewer thật · `lookup_reference` không có invariant non-overlap DB-enforced (tin Lakehouse chuẩn hoá) · metrics label chưa escape `"` (tenant=uuid nên thấp rủi ro) · asgi provider dev chưa tenant-scoped/commit (prod wiring: traluat_app + PostgresAuditLog).
+
+---
+
 ## Thứ tự sửa (ship order)
 1. **W5 C1–C6** (rò tenant/egress = vi phạm pháp luật) + **W1 C1/C3** (gate materialize + ẩn danh) — *trước khi bất kỳ dữ liệu khách/bản án nào chạm hệ.*
 2. **W2 C1/C2 + W4 C1–C3** (bitemporal invariant + hard-gate đúng) — *trước khi tin kết quả truy xuất/suy luận.*
