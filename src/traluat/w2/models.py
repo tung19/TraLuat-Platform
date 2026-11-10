@@ -151,6 +151,19 @@ class Chunk(Base):
     )
 
 
+class Template(Base):
+    """FR-34 — mẫu đơn/văn bản (TES). body có placeholder {slot}; retrieve theo loại
+    hoặc ngữ nghĩa (embedding). 'Học từ template' = lưu exemplar đã duyệt (L14)."""
+    __tablename__ = "template"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(index=True)        # 'don_khoi_kien' | 'don_xin_cap_phep'…
+    title: Mapped[str]
+    body: Mapped[str]
+    slots: Mapped[list] = mapped_column(JSONB)
+    lang: Mapped[str] = mapped_column(default="vi")
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
+
+
 class PrecedentRow(Base):
     """Án lệ / bản án tham chiếu (W4 §2). cited_eids = điều mà án lệ tựa vào →
     prune_unsupported bỏ án lệ mất hết điểm tựa. NQ 04/2019: án lệ công bố RÀNG

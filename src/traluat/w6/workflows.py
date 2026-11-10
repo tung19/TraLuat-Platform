@@ -76,6 +76,46 @@ class ComplianceDiffService:
 
 
 @dataclass
+class DraftResult:
+    abstain: bool
+    reason: str = ""
+    text: str = ""
+    template_id: int | None = None
+    citations: list[str] = field(default_factory=list)
+    ai_label: bool = True
+
+
+class PetitionDraftService:
+    """FR-34 — soạn đơn từ TEMPLATE, GROUNDED (chỉ-từ-template + điều luật truy xuất),
+    cite-or-abstain, nhãn AI. Dữ liệu khách → egress local (qua gateway truyền vào)."""
+
+    def __init__(self, session: Session, *, gateway, nli=None) -> None:
+        self.s = session
+        self.gateway = gateway
+        self.nli = nli
+
+    def draft(self, kind: str, facts: str, as_of: dt.date, *,
+              tenant_id: str | None = None, lang: str = "vi", top_k: int = 5) -> DraftResult:
+        from ..w1.templates import match_templates
+        from ..w3 import ground, retrieve
+
+        tpls = match_templates(self.s, kind=kind, lang=lang)
+        if not tpls:
+            return DraftResult(True, reason="no_template")
+        tpl = tpls[0]
+        cands = retrieve(self.s, facts, as_of, lang=lang, top_k=top_k)
+        prompt = f"MẪU ĐƠN:\n{tpl.body}\n\nTÌNH TIẾT:\n{facts}\n\nĐiền mẫu, viện dẫn điều luật."
+        d = self.gateway.generate(prompt, cands, as_of=as_of, node="draft",
+                                  tenant_id=tenant_id, lang=lang)
+        allowed = {c.unit_eid for c in cands}
+        cited = [c.unit_eid for c in d.citations if c.unit_eid in allowed]
+        g = ground(self.s, d.text, as_of, cited, lang, self.nli)
+        if g.abstain:
+            return DraftResult(True, reason=g.reason, text=d.text, template_id=tpl.id)
+        return DraftResult(False, text=d.text, template_id=tpl.id, citations=g.supported_eids)
+
+
+@dataclass
 class JudgmentFinding:
     flagged: bool
     reason: str              # "" nếu không cờ
