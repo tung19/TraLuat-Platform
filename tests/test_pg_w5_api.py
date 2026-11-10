@@ -244,6 +244,64 @@ def test_draft_viewer_forbidden(client):
     assert r.status_code == 403
 
 
+def _client_shared_audit():
+    """Client với MỘT LegalService (audit dùng chung) → test kiểm được audit trail."""
+    from traluat.w5.audit import AuditLog
+    conn = make_engine().connect()
+    trans = conn.begin()
+    s = Session(bind=conn, future=True)
+    load_to_w2(s, frbr_uri=FRBR, doc_type="nghi_dinh", date_effective=D(2021, 1, 1),
+               units=build_ingest(SAMPLE, "nd99"), doc_number="99/2020/NĐ-CP")
+    audit = AuditLog()
+    svc = LegalService(s, local_gateway=EchoLLMGateway(), claude_gateway=EchoLLMGateway(),
+                       audit=audit)
+
+    def provider():
+        yield svc                                       # cùng 1 service → audit dùng chung
+
+    app = create_app(jwt_secret=SECRET, service_provider=provider)
+    return TestClient(app), audit, (s, trans, conn)
+
+
+def test_judgment_writes_audit_trail():
+    # CN-03 high-risk: judgment PHẢI để lại bằng chứng audit (intent + done)
+    try:
+        tc, audit, (s, trans, conn) = _client_shared_audit()
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"Postgres không sẵn: {e}")
+    try:
+        r = tc.post("/judgment", json={"cited_eids": [], "expected_governing": ["x"],
+                                       "as_of": "2022-01-01"}, headers=_lawyer())
+        tid = r.json()["trace_id"]
+        phases = [e.phase for e in audit.by_trace(tid)]
+        assert "intent" in phases and "done" in phases      # write-ahead + confirm
+        assert audit.by_trace(tid)[0].action == "judgment"
+    finally:
+        s.close()
+        if trans.is_active:
+            trans.rollback()
+        conn.close()
+
+
+def test_draft_writes_audit_trail():
+    try:
+        tc, audit, (s, trans, conn) = _client_shared_audit()
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"Postgres không sẵn: {e}")
+    try:
+        r = tc.post("/draft", json={"kind": "khoi_kien", "facts": "x", "as_of": "2022-01-01"},
+                    headers=_lawyer())
+        tid = r.json()["trace_id"]
+        e = audit.by_trace(tid)
+        assert e and e[0].action == "draft" and e[0].data_class == "client-sensitive"
+        assert e[0].llm_destination == "local"              # tình tiết khách không rời VN
+    finally:
+        s.close()
+        if trans.is_active:
+            trans.rollback()
+        conn.close()
+
+
 def test_judgment_endpoint_flags_missing_binding(client):
     # điều còn hiệu lực @ngày xử mà bản án không viện → cờ (second-opinion)
     r = client.post("/judgment", json={"cited_eids": [],

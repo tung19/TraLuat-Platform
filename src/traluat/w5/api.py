@@ -369,6 +369,17 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         except PermissionError as e:
             raise HTTPException(403, str(e))
 
+    def audited(svc, ctx, action, *, data_class, destination, resource):
+        """Ghi audit write-ahead (intent) cho hành động có xử-lý dữ-liệu/high-risk —
+        trả trace_id + entry để confirm sau (CN-03 judgment, NĐ356 Đ29 draft)."""
+        import uuid as _uuid
+        tid = _uuid.uuid4().hex
+        intent = svc.audit.record_intent(
+            tenant_id=ctx.tenant_id, actor="api", action=action, resource=resource,
+            trace_id=tid, data_class=data_class, residency=ctx.residency_region,
+            llm_destination=destination)
+        return tid, intent
+
     @app.get("/health")
     def health():
         return {"status": "ok"}
@@ -541,15 +552,21 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         # FR-34/15 — soạn đơn/HĐ từ template, GROUNDED. Tình tiết khách → CHỈ local gateway
         # (I3 residency, R2 no-failover): local down → abstain, KHÔNG ra Claude.
         need(ctx, "lawyer", "reviewer", "owner")
+        # NĐ356 Đ29: xử-lý tình tiết khách → audit write-ahead (bằng chứng ở-lại-VN).
+        tid, intent = audited(svc, ctx, "draft", data_class="client-sensitive",
+                              destination="local", resource="petition")
         if not svc.local_gateway.healthy():
-            return {"abstain": True, "reason": "local_unavailable", "ai_label": True}
+            svc.audit.confirm(intent, "denied")        # R2 no-failover: local down → abstain
+            return {"abstain": True, "reason": "local_unavailable",
+                    "ai_label": True, "trace_id": tid}
         from ..w6 import PetitionDraftService
         d = PetitionDraftService(svc.s, gateway=svc.local_gateway, nli=svc.nli).draft(
             body.kind, body.facts, dt.date.fromisoformat(body.as_of),
             tenant_id=ctx.tenant_id, lang=body.lang)
+        svc.audit.confirm(intent, "done")
         return {"abstain": d.abstain, "reason": d.reason, "text": d.text,
                 "template_id": d.template_id, "citations": d.citations,
-                "ai_label": d.ai_label, "route": "local"}
+                "ai_label": d.ai_label, "route": "local", "trace_id": tid}
 
     @app.get("/deadline")
     def deadline(kind: str, start: str, as_of: str | None = None,
@@ -588,11 +605,16 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         # FR-03 — second-opinion bản án: CHỈ cờ điều ràng buộc đúng tình huống còn hiệu lực
         # mà bản án không viện (CN-03 high-risk → HITL + audit; chiều tuỳ nghi → abstain).
         need(ctx, "lawyer", "reviewer", "owner")
+        # CN-03 (QĐ 33/2026): high-risk → BẮT BUỘC logging. Audit write-ahead + confirm.
+        tid, intent = audited(svc, ctx, "judgment", data_class="case-review",
+                              destination="none", resource="judgment")
         from ..w6 import JudgmentAnalysisService
         f = JudgmentAnalysisService(svc.s).analyze(
             body.cited_eids, body.expected_governing, dt.date.fromisoformat(body.as_of))
+        svc.audit.confirm(intent, "done")
         return {"flagged": f.flagged, "reason": f.reason,
                 "missing_binding": f.missing_binding, "ai_label": True,
+                "trace_id": tid,
                 "hitl_required": True}            # CN-03: con người quyết định cuối
 
     return app

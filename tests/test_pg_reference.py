@@ -35,8 +35,11 @@ def session():
         conn.close()
 
 
-def _count(s):
-    return s.scalar(sa.select(sa.func.count()).select_from(ReferenceValue))
+def _count(s, dataset="muc_phat", key="hanh_vi_x"):
+    # ĐẾM THEO KHOÁ (không đếm toàn bảng) → robust với seed-data đã commit; vẫn chứng
+    # minh idempotent (re-upsert cùng khoá không nhân đôi).
+    return s.scalar(sa.select(sa.func.count()).select_from(ReferenceValue).where(
+        ReferenceValue.dataset == dataset, ReferenceValue.key == key))
 
 
 def test_effectivity_aware_lookup_with_source(session: Session):
