@@ -65,14 +65,14 @@ class GateResult:
 
 def verify_citation(
     session: Session, claim: str, unit_eid: str, anchor: dt.date, lang: str = "vi",
-    nli: NLIVerifier | None = None,
+    nli: NLIVerifier | None = None, known_as_of: dt.datetime | None = None,
 ) -> GateResult:
     """Verify 1 trích dẫn qua 3 cổng tất định (+ gate3 NLI tuỳ chọn, không veto)."""
     exists = session.scalar(sa.select(Unit.id).where(Unit.eid == unit_eid)) is not None
     if not exists:
         return GateResult(unit_eid, False, False, False, EffectStatus.ABSENT, None)
 
-    text, status = repo.citable_text(session, unit_eid, anchor, lang)
+    text, status = repo.citable_text(session, unit_eid, anchor, lang, known_as_of=known_as_of)
     gate2 = status in _APPLICABLE and text is not None
 
     missing = _facts(claim) - _facts(text or "")
@@ -91,7 +91,7 @@ class GroundingResult:
 
 def ground(
     session: Session, claim: str, anchor: dt.date, citations: list[str], lang: str = "vi",
-    nli: NLIVerifier | None = None,
+    nli: NLIVerifier | None = None, known_as_of: dt.datetime | None = None,
 ) -> GroundingResult:
     """Kiểm 1 khẳng định + danh sách trích dẫn → giữ hay ABSTAIN.
 
@@ -101,7 +101,8 @@ def ground(
     if not citations:
         return GroundingResult(True, "insufficient_retrieval")
 
-    gates = [verify_citation(session, claim, eid, anchor, lang, nli) for eid in citations]
+    gates = [verify_citation(session, claim, eid, anchor, lang, nli, known_as_of)
+             for eid in citations]
     supported = [g.unit_eid for g in gates if g.passed]
     if not supported:
         return GroundingResult(True, "no_supported_citation", gates=gates)

@@ -35,10 +35,12 @@ class Chunk:
 
 def build_chunks(
     session: Session, frbr_uri: str, as_of: dt.date, lang: str = "vi",
+    known_as_of: dt.datetime | None = None,
 ) -> list[Chunk]:
     """Chunk mọi đơn vị NỘI DUNG của 1 VB tại as_of (keep-and-mark effect_status).
 
     Đơn vị kết cấu (Chương/Mục) → bỏ (chỉ là ngữ cảnh header). ABSENT → bỏ.
+    known_as_of: pin tx-time (B1) để nhất quán xuyên 1 request.
     """
     doc = session.scalar(sa.select(Document).where(Document.frbr_uri == frbr_uri))
     if doc is None:
@@ -58,7 +60,7 @@ def build_chunks(
     for u in units:
         if u.unit_type in _STRUCTURAL:
             continue
-        text, status = repo.citable_text(session, u.eid, as_of, lang)
+        text, status = repo.citable_text(session, u.eid, as_of, lang, known_as_of=known_as_of)
         if text is None:  # ABSENT / không có bản trích được
             continue
         chunks.append(Chunk(

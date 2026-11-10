@@ -93,6 +93,7 @@ class MultiRoleReasoner:
         pool: dict[str, object] = {}              # verified tích luỹ
         chunk_all: dict[str, object] = {}
         transcript: list[Utterance] = []
+        trail: list = []                          # B6: gom audit trail (giải trình debate)
         converged = False
         rnd = 0
 
@@ -117,6 +118,7 @@ class MultiRoleReasoner:
                 # Auditor trên phát ngôn — chỉ audit eid MỚI (memoize per vụ)
                 new = [a for a in articles if a.unit_eid not in memo]
                 res = self.engine.auditor.audit(case.facts, as_of, new, lang=lang)
+                trail.extend(res.trail)            # B6: giữ lý do nhận/loại từng điều
                 for a in res.verified_articles:
                     memo[a.unit_eid] = a
                 for e in res.trail:
@@ -143,5 +145,5 @@ class MultiRoleReasoner:
             "(hợp nghị)", case.facts, as_of, verified, chunk_all, lang, tenant_id)
         adj = Adjudication(
             parties=[party], verified_articles=verified, verified_precedents=[],
-            audit_trail=[], draft=party.relief, ai_label=True)
+            audit_trail=trail, draft=party.relief, ai_label=True)
         return DebateResult(adj, transcript, rnd, converged, thread_id)

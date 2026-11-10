@@ -61,15 +61,21 @@ class LegalService:
             return self.claude_gateway
         return None
 
+    def _local_healthy(self) -> bool:
+        fn = getattr(self.local_gateway, "healthy", None)
+        return bool(fn()) if callable(fn) else True
+
     def analyze(
         self, case: CaseInput, as_of: dt.date, ctx: TenantContext, *,
         client_data: bool = True,          # tình tiết do khách cung cấp → sensitive
-        local_available: bool = True,
+        local_available: bool | None = None,   # B5: None → health-probe gateway (không tin client)
         actor: str = "api",
         trace_id: str | None = None,
         lang: str = "vi",
     ) -> ServiceResponse:
         trace_id = trace_id or uuid.uuid4().hex   # bất biến (2): luôn có trace_id
+        if local_available is None:
+            local_available = self._local_healthy()
 
         # provenance tất định (không đoán nội dung): KB công + (nếu có) upload khách
         provenances = ([f"tenant:{ctx.tenant_id}"] if client_data else []) + [PUBLIC_KB]

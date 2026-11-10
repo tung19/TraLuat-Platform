@@ -20,10 +20,19 @@ from sqlalchemy.orm import Session
 
 from ..w2.bitemporal import EffectStatus
 from ..w3 import ground
+from ..w3.chunker import Chunk
 from ..w3.ports import LLMGateway, NLIVerifier
-from ..w3.retrieval import retrieve
+from ..w3.retrieval import RetrievedChunk, retrieve
 from .auditor import Auditor, ElementJudge
 from .types import Article, AuditEntry, Precedent
+
+
+def _synth_chunk(art: Article, as_of: dt.date, lang: str = "vi") -> RetrievedChunk:
+    """B4: dựng RetrievedChunk từ Article (cho ngữ cảnh adjudicate khi thiếu chunk —
+    vd debate resume nạp pool từ checkpoint)."""
+    ch = Chunk(unit_eid=art.unit_eid, lang=lang, struct_header=art.unit_eid,
+               span_text=art.text or "", effect_status=EffectStatus.IN_FORCE, as_of=as_of)
+    return RetrievedChunk(chunk=ch, score=0.0, applicable=True)
 
 
 @dataclass
@@ -84,7 +93,9 @@ class ReasoningEngine:
     def _adjudicate(self, party, facts, as_of, verified, chunk_by_eid, lang, tenant_id):
         if not verified:
             return PartyResult(party, abstain=True, reason="insufficient_basis")
-        ctx = [chunk_by_eid[a.unit_eid] for a in verified if a.unit_eid in chunk_by_eid]
+        # B4: eid thiếu chunk (vd resume từ checkpoint) → dựng chunk từ Article,
+        # không để rơi khỏi ngữ cảnh LLM.
+        ctx = [chunk_by_eid.get(a.unit_eid) or _synth_chunk(a, as_of, lang) for a in verified]
         draft = self.gateway.generate(facts, ctx, as_of=as_of, node="adjudicator",
                                       tenant_id=tenant_id, lang=lang)
         # ★ Adjudicator CHỈ được trích trong tập verified (hợp đồng thu hẹp §2) —

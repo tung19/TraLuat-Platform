@@ -61,3 +61,9 @@ def test_no_conflict_when_numbers_agree(session: Session):
     # Thông tư cùng số 30 ngày → KHÔNG mâu thuẫn
     _seed(session, tt_text="Điều 1. Thời hạn\nThời hạn nộp hồ sơ đăng ký doanh nghiệp là 30 ngày làm việc.")
     assert detect_conflicts(session, [LUAT, TT], D(2022, 1, 1)) == []
+
+
+def test_b2_overlapping_values_not_flagged(session: Session):
+    # Luật {30}, Thông tư {15,30} (liệt kê cả hai) → GIAO nhau → KHÔNG xung đột (B2-fix)
+    _seed(session, tt_text="Điều 1. Thời hạn\nThời hạn nộp hồ sơ đăng ký doanh nghiệp là 15 hoặc 30 ngày làm việc.")
+    assert detect_conflicts(session, [LUAT, TT], D(2022, 1, 1)) == []

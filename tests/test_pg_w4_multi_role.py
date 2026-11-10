@@ -55,6 +55,7 @@ def test_converges_by_set_equality(session: Session):
     assert res.thread_id == "tenant:t1:c1"           # không timestamp
     assert len(res.transcript) == len(ROLES) * 2
     assert res.adjudication.verified_articles and not res.adjudication.parties[0].abstain
+    assert res.adjudication.audit_trail             # B6: debate mode có trail (không rỗng)
 
 
 def test_stops_at_max_rounds(session: Session):

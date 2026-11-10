@@ -57,6 +57,10 @@ def answer_question(
     extra_anchors: list[dt.date] | None = None,
     plan_caveat: bool = False,
 ) -> Answer:
+    # B1: pin MỘT known_as_of (tx-time) cho cả request → retrieve và verify thấy
+    # cùng một snapshot, không lệch nếu có tx-version commit giữa chừng.
+    known = dt.datetime.now(dt.timezone.utc)
+
     # 1) retrieve tại primary + các mốc phụ (§1b đa-mốc), hợp nhất theo eid (giữ
     #    bản primary trước → text trích dẫn theo mốc chính). rỗng → abstain.
     anchors = [as_of, *(extra_anchors or [])]
@@ -64,7 +68,7 @@ def answer_question(
     cands = []
     for a in anchors:
         for rc in retrieve(session, query, a, lang=lang,
-                           scope_frbr_uris=scope_frbr_uris, top_k=top_k):
+                           scope_frbr_uris=scope_frbr_uris, top_k=top_k, known_as_of=known):
             if rc.unit_eid not in seen:
                 seen[rc.unit_eid] = rc
                 cands.append(rc)
@@ -82,8 +86,8 @@ def answer_question(
     allowed = {rc.unit_eid for rc in cands}
     cited = [c.unit_eid for c in draft.citations if c.unit_eid in allowed]
 
-    # 3) verify từng trích dẫn (gate1/2/3b tất định + gate3 NLI tuỳ chọn)
-    g = ground(session, draft.text, as_of, cited, lang, nli)
+    # 3) verify từng trích dẫn (gate1/2/3b tất định + gate3 NLI tuỳ chọn) — cùng known
+    g = ground(session, draft.text, as_of, cited, lang, nli, known_as_of=known)
     if g.abstain:
         return Answer.abstained(g.reason, as_of, gates=g.gates)
 

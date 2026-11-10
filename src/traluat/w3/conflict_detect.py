@@ -110,9 +110,11 @@ def detect_conflicts(
                         continue
                     topical_pairs.append((ca.unit_eid, ca.span_text, cb.unit_eid, cb.span_text))
                     qb = _quantities(cb.span_text)
-                    diverge = [u for u in qa.keys() & qb.keys() if qa[u] != qb[u]]
-                    if diverge:
-                        u = diverge[0]
+                    # B2-fix: xung đột chỉ khi cùng đơn vị mà hai tập giá trị RỜI NHAU
+                    # (không giá trị chung). {30} vs {15,30} giao nhau → KHÔNG xung đột.
+                    diverge = sorted(u for u in qa.keys() & qb.keys()
+                                     if qa[u] and qb[u] and qa[u].isdisjoint(qb[u]))
+                    for u in diverge:
                         cands.append(ConflictCandidate(
                             ca.unit_eid, cb.unit_eid, "numeric_divergence",
                             f"{u}: {sorted(qa[u])} vs {sorted(qb[u])}"))

@@ -111,6 +111,11 @@ class BaseLLMGateway:
     def model_name(self) -> str:
         return "base"
 
+    def healthy(self) -> bool:
+        """Health-probe (B5): EgressPolicy đọc đây, KHÔNG nhận từ request client.
+        Override ở gateway thật (ping vLLM) hoặc đặt self._healthy=False để mô phỏng."""
+        return getattr(self, "_healthy", True)
+
     def _draft(self, query, chunks, prompt, as_of, node, lang) -> tuple[str, list[Citation]]:
         raise NotImplementedError
 

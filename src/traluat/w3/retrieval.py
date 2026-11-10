@@ -54,6 +54,7 @@ def retrieve(
     scope_frbr_uris: list[str] | None = None,
     top_k: int = 8,
     embedder=None,
+    known_as_of: dt.datetime | None = None,
 ) -> list[RetrievedChunk]:
     """Trả top_k ứng viên cấp điều–khoản, mỗi cái gắn effect_status@as_of.
 
@@ -65,7 +66,8 @@ def retrieve(
     """
     uris = scope_frbr_uris or list(session.scalars(sa.select(Document.frbr_uri)))
     qtok = _tokens(query)
-    chunks = [ch for uri in uris for ch in build_chunks(session, uri, as_of, lang)]
+    chunks = [ch for uri in uris
+              for ch in build_chunks(session, uri, as_of, lang, known_as_of=known_as_of)]
 
     scored: list[RetrievedChunk] = []
     if embedder is not None and chunks:

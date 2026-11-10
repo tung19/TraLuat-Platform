@@ -27,7 +27,7 @@ class AnalyzeRequest(BaseModel):
     as_of: str                       # ISO date
     parties: list[str] | None = None
     client_data: bool = True
-    local_available: bool = True     # health vLLM (demo/test R2)
+    # B5: KHÔNG nhận local_available từ client — service tự health-probe gateway (R2).
 
 
 def get_service() -> LegalService:   # placeholder — create_app/ test override
@@ -65,7 +65,7 @@ def create_app(*, jwt_secret: str, service_provider) -> FastAPI:
         resp = svc.analyze(
             CaseInput(facts=body.facts, parties=body.parties or []),
             dt.date.fromisoformat(body.as_of), ctx,
-            client_data=body.client_data, local_available=body.local_available,
+            client_data=body.client_data,   # local_available: service tự probe (B5)
         )
         return {
             "answered": resp.answered,

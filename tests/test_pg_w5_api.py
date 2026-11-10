@@ -25,6 +25,26 @@ def _tok(**claims) -> str:
     return jwt.encode(claims, SECRET, algorithm="HS256")
 
 
+class _DownEcho(EchoLLMGateway):
+    """Mô phỏng vLLM local DOWN (health-probe B5)."""
+    def healthy(self) -> bool:
+        return False
+
+
+def _make_client(local_gateway):
+    conn = make_engine().connect()
+    trans = conn.begin()
+    s = Session(bind=conn, future=True)
+    load_to_w2(s, frbr_uri=FRBR, doc_type="nghi_dinh", date_effective=D(2021, 1, 1),
+               units=build_ingest(SAMPLE, "nd99"), doc_number="99/2020/NĐ-CP")
+
+    def provider():
+        yield LegalService(s, local_gateway=local_gateway, claude_gateway=EchoLLMGateway())
+
+    app = create_app(jwt_secret=SECRET, service_provider=provider)
+    return TestClient(app), (s, trans, conn)
+
+
 @pytest.fixture()
 def client():
     try:
@@ -82,10 +102,20 @@ def test_viewer_role_403(client):
     assert r.status_code == 403
 
 
-def test_local_down_denies(client):
-    body = {**BODY, "local_available": False}
-    r = client.post("/analyze", json=body,
+def test_local_down_denies():
+    # B5/R2: local gateway unhealthy (probe) → dữ liệu khách DENY, KHÔNG do client body
+    try:
+        tc, (s, trans, conn) = _make_client(_DownEcho())
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"Postgres không sẵn: {e}")
+    try:
+        r = tc.post("/analyze", json=BODY,
                     headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='lawyer')}"})
-    d = r.json()
-    assert not d["answered"] and d["route"]["destination"] == "deny"   # R2
-    assert d["ai_label"] and d["trace_id"]
+        d = r.json()
+        assert not d["answered"] and d["route"]["destination"] == "deny"   # R2
+        assert d["ai_label"] and d["trace_id"]
+    finally:
+        s.close()
+        if trans.is_active:
+            trans.rollback()
+        conn.close()
