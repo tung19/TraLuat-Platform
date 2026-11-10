@@ -348,7 +348,7 @@ def test_draft_writes_audit_trail():
                     headers=_lawyer())
         tid = r.json()["trace_id"]
         e = audit.by_trace(tid)
-        assert e and e[0].action == "draft" and e[0].data_class == "client-sensitive"
+        assert e and e[0].action == "draft" and e[0].data_class == "client_sensitive"
         assert e[0].llm_destination == "local"              # tình tiết khách không rời VN
     finally:
         s.close()

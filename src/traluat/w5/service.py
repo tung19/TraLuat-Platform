@@ -22,8 +22,8 @@ from ..w4 import Adjudication, CaseInput, ReasoningEngine
 from ..w4.auditor import ElementJudge
 from .audit import AuditLog
 from .egress import PUBLIC_KB, EgressPolicy, LLMDestination, RouteDecision
-from .tracing import span
 from .tenancy import TenantContext
+from .tracing import span
 
 
 @dataclass
@@ -155,3 +155,90 @@ class LegalService:
         self.audit.confirm(intent, "done")
         return ServiceResponse(not ans.abstain, trace_id, decision, answer=ans,
                                reason=ans.reason)
+
+    # ── Dịch vụ nghiệp vụ (W6) — vỏ egress/audit, endpoint KHÔNG tự new service ──
+    def draft(self, kind: str, facts: str, as_of: dt.date, ctx: TenantContext, *,
+              lang: str = "vi", actor: str = "api"):
+        """FR-34 soạn đơn. Tình tiết khách → egress LOCAL (R2 no-failover). Trả
+        (DraftResult, trace_id)."""
+        from ..w6 import DraftResult, PetitionDraftService
+        trace_id = uuid.uuid4().hex
+        _decision, intent, gateway = self._route(
+            ctx, [f"tenant:{ctx.tenant_id}", PUBLIC_KB], "draft", None, trace_id, actor)
+        if gateway is None:                       # local down → không fallback
+            self.audit.confirm(intent, "denied")
+            return DraftResult(True, reason="local_unavailable"), trace_id
+        d = PetitionDraftService(self.s, gateway=gateway, nli=self.nli).draft(
+            kind, facts, as_of, tenant_id=ctx.tenant_id, lang=lang)
+        self.audit.confirm(intent, "done")
+        return d, trace_id
+
+    def advise(self, activity: str, as_of: dt.date, ctx: TenantContext, *,
+               lang: str = "vi", actor: str = "api"):
+        """FR-08 tư vấn tuân thủ. Hoạt động khách → egress LOCAL. Trả (AdvisoryResult, tid)."""
+        from ..w6 import AdvisoryResult, ComplianceAdvisoryService
+        trace_id = uuid.uuid4().hex
+        _decision, intent, gateway = self._route(
+            ctx, [f"tenant:{ctx.tenant_id}", PUBLIC_KB], "advise", None, trace_id, actor)
+        if gateway is None:
+            self.audit.confirm(intent, "denied")
+            return AdvisoryResult(True, reason="local_unavailable"), trace_id
+        a = ComplianceAdvisoryService(self.s, gateway=gateway, nli=self.nli).advise(
+            activity, as_of, tenant_id=ctx.tenant_id, lang=lang)
+        self.audit.confirm(intent, "done")
+        return a, trace_id
+
+    def judgment(self, cited_eids, expected_governing, as_of: dt.date, ctx: TenantContext,
+                 *, cited_precedents=None, actor: str = "api"):
+        """FR-03 second-opinion. CN-03 high-risk → BẮT BUỘC audit. Trả (JudgmentFinding, tid)."""
+        from ..w6 import JudgmentAnalysisService
+        trace_id = uuid.uuid4().hex
+        _d, intent, _g = self._route(ctx, [PUBLIC_KB], "judgment", None, trace_id, actor)
+        f = JudgmentAnalysisService(self.s).analyze(
+            cited_eids, expected_governing, as_of, cited_precedents=cited_precedents)
+        self.audit.confirm(intent, "done")
+        return f, trace_id
+
+    # ── Đọc KB công (không model, không dữ-liệu-khách) — vỏ mỏng ──
+    def compare(self, frbr: str, a: dt.date, b: dt.date, lang: str = "vi"):
+        from ..w6 import ComplianceDiffService
+        return ComplianceDiffService(self.s).diff(frbr, a, b, lang)
+
+    def analyze_case(self, facts: str, parties, as_of: dt.date, ctx: TenantContext, **kw):
+        """Vỏ tiện: endpoint truyền facts+parties thô, không chạm CaseInput (W4)."""
+        return self.analyze(CaseInput(facts=facts, parties=parties or []), as_of, ctx, **kw)
+
+    def review(self, text: str, rule_dicts):
+        from ..w6 import RequiredClauseRule, ReviewService
+        rules = [RequiredClauseRule(**r) for r in rule_dicts]
+        return ReviewService().review(text, rules)
+
+    def deadline(self, kind: str, start: dt.date, as_of: dt.date):
+        from ..tools.deadlines import compute_deadline
+        return compute_deadline(self.s, kind, start, as_of)
+
+    def document_as_of(self, frbr: str, as_of: dt.date):
+        from ..w2 import repo
+        return repo.document_as_of(self.s, frbr, as_of)
+
+    def nearby(self, lat: float, lon: float, radius_m: float, *, kind=None):
+        from ..tools.directory import nearby
+        return nearby(self.s, lat, lon, radius_m, kind=kind)
+
+    def neighborhood(self, eid: str, as_of, hops: int):
+        from ..w2 import repo
+        return repo.neighborhood(self.s, eid, as_of, max_hops=min(hops, 3))
+
+    def graph_central(self, driver):
+        if driver is None:
+            return {}
+        from ..w2.graph_neo4j import gds_pagerank
+        return dict(gds_pagerank(driver))
+
+    def review_queue(self):
+        from ..knowledge_ops import pending_relations
+        return pending_relations(self.s)
+
+    def approve_relation(self, rel_id: int):
+        from ..knowledge_ops import approve_relation
+        approve_relation(self.s, rel_id)

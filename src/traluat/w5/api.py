@@ -17,7 +17,6 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel
 
-from ..w4 import CaseInput
 from .auth import decode_context
 from .metrics import Metrics
 from .pages import (
@@ -138,17 +137,6 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         except PermissionError as e:
             raise HTTPException(403, str(e))
 
-    def audited(svc, ctx, action, *, data_class, destination, resource):
-        """Ghi audit write-ahead (intent) cho hành động có xử-lý dữ-liệu/high-risk —
-        trả trace_id + entry để confirm sau (CN-03 judgment, NĐ356 Đ29 draft)."""
-        import uuid as _uuid
-        tid = _uuid.uuid4().hex
-        intent = svc.audit.record_intent(
-            tenant_id=ctx.tenant_id, actor="api", action=action, resource=resource,
-            trace_id=tid, data_class=data_class, residency=ctx.residency_region,
-            llm_destination=destination)
-        return tid, intent
-
     @app.get("/health")
     def health():
         return {"status": "ok"}
@@ -177,10 +165,8 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     def doc(frbr: str, as_of: str | None = None,
             ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
         # Điều hướng trích dẫn — VĂN BẢN TẠI NGÀY T (L12).
-        from ..w2 import repo
         a = parse_date(as_of, default=dt.date.today())
-        return {"frbr": frbr, "as_of": a.isoformat(),
-                "text": repo.document_as_of(svc.s, frbr, a)}
+        return {"frbr": frbr, "as_of": a.isoformat(), "text": svc.document_as_of(frbr, a)}
 
     @app.get("/review", response_class=HTMLResponse)
     def review_page():                 # L12 — UI rà soát, highlight điều khoản bỏ sót
@@ -190,24 +176,20 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     def review(body: ReviewRequest, ctx: TenantContext = Depends(auth),
                svc: LegalService = Depends(get_service)):
         need(ctx, "lawyer", "reviewer", "owner")
-        from ..w6 import RequiredClauseRule, ReviewService
-        rules = [RequiredClauseRule(**r) for r in (body.rules or _DEFAULT_REVIEW_RULES)]
-        return [f.__dict__ for f in ReviewService().review(body.text, rules)]
+        return [f.__dict__ for f in svc.review(body.text, body.rules or _DEFAULT_REVIEW_RULES)]
 
     @app.get("/review/queue")
     def review_queue(ctx: TenantContext = Depends(auth),
                      svc: LegalService = Depends(get_service)):
         need(ctx, "reviewer", "owner")
-        from ..knowledge_ops import pending_relations
         return [{"id": r.id, "type": r.relation_type, "confidence": r.confidence,
-                 "basis": r.confidence_basis} for r in pending_relations(svc.s)]
+                 "basis": r.confidence_basis} for r in svc.review_queue()]
 
     @app.post("/review/queue/{rel_id}/approve")
     def review_approve(rel_id: int, ctx: TenantContext = Depends(auth),
                        svc: LegalService = Depends(get_service)):
         need(ctx, "reviewer", "owner")
-        from ..knowledge_ops import approve_relation
-        approve_relation(svc.s, rel_id)
+        svc.approve_relation(rel_id)
         return {"approved": rel_id}
 
     @app.get("/directory/nearby")
@@ -215,8 +197,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
                          kind: str | None = None, ctx: TenantContext = Depends(auth),
                          svc: LegalService = Depends(get_service)):
         # FR-39 — danh bạ LS/công chứng/toà gần toạ độ (KB công, không tình tiết khách).
-        from ..tools.directory import nearby
-        hits = nearby(svc.s, lat, lon, radius_m, kind=kind)
+        hits = svc.nearby(lat, lon, radius_m, kind=kind)
         return [{"id": h.entry.id, "kind": h.entry.kind, "name": h.entry.name,
                  "address": h.entry.address, "phone": h.entry.phone,
                  "lat": h.lat, "lon": h.lon,
@@ -253,21 +234,16 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
                 for a in rows]
 
     @app.get("/graph/central")
-    def graph_central(ctx: TenantContext = Depends(auth)):
+    def graph_central(ctx: TenantContext = Depends(auth),
+                      svc: LegalService = Depends(get_service)):
         # GDS PageRank 'luật trọng tâm' {eid: score} — chỉ khi Neo4j cấu hình; else {}.
-        drv = app.state.neo4j_driver
-        if drv is None:
-            return {}
-        from ..w2.graph_neo4j import gds_pagerank
-        return dict(gds_pagerank(drv))
+        return svc.graph_central(app.state.neo4j_driver)
 
     @app.get("/graph/{eid}")
     def graph(eid: str, as_of: str | None = None, hops: int = 1,
               ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
         # Đồ thị quan hệ quy phạm quanh 1 điều (KB công) — FR-37 visualize.
-        from ..w2 import repo
-        a = parse_date(as_of, default=None)
-        return repo.neighborhood(svc.s, eid, a, max_hops=min(hops, 3))
+        return svc.neighborhood(eid, parse_date(as_of, default=None), hops)
 
     @app.post("/analyze")
     def analyze(
@@ -275,14 +251,8 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         ctx: TenantContext = Depends(auth),
         svc: LegalService = Depends(get_service),
     ):
-        try:
-            need(ctx, "lawyer", "reviewer", "owner")
-        except PermissionError as e:
-            raise HTTPException(403, str(e))
-        resp = svc.analyze(
-            CaseInput(facts=body.facts, parties=body.parties or []),
-            parse_date(body.as_of), ctx,   # facts sensitive (I3); probe (B5)
-        )
+        need(ctx, "lawyer", "reviewer", "owner")
+        resp = svc.analyze_case(body.facts, body.parties, parse_date(body.as_of), ctx)
         return {
             "answered": resp.answered,
             "trace_id": resp.trace_id,
@@ -335,19 +305,9 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
               svc: LegalService = Depends(get_service)):
         # FR-34/15 — soạn đơn/HĐ từ template, GROUNDED. Tình tiết khách → CHỈ local gateway
         # (I3 residency, R2 no-failover): local down → abstain, KHÔNG ra Claude.
+        # FR-34/15 — soạn đơn/HĐ. Tình tiết khách → egress LOCAL trong service (R2).
         need(ctx, "lawyer", "reviewer", "owner")
-        # NĐ356 Đ29: xử-lý tình tiết khách → audit write-ahead (bằng chứng ở-lại-VN).
-        tid, intent = audited(svc, ctx, "draft", data_class="client-sensitive",
-                              destination="local", resource="petition")
-        if not svc.local_gateway.healthy():
-            svc.audit.confirm(intent, "denied")        # R2 no-failover: local down → abstain
-            return {"abstain": True, "reason": "local_unavailable",
-                    "ai_label": True, "trace_id": tid}
-        from ..w6 import PetitionDraftService
-        d = PetitionDraftService(svc.s, gateway=svc.local_gateway, nli=svc.nli).draft(
-            body.kind, body.facts, parse_date(body.as_of),
-            tenant_id=ctx.tenant_id, lang=body.lang)
-        svc.audit.confirm(intent, "done")
+        d, tid = svc.draft(body.kind, body.facts, parse_date(body.as_of), ctx, lang=body.lang)
         return {"abstain": d.abstain, "reason": d.reason, "text": d.text,
                 "template_id": d.template_id, "citations": d.citations,
                 "ai_label": d.ai_label, "route": "local", "trace_id": tid}
@@ -355,18 +315,9 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     @app.post("/advise")
     def advise(body: AdviseRequest, ctx: TenantContext = Depends(auth),
                svc: LegalService = Depends(get_service)):
-        # FR-08 — tư vấn tuân thủ: hoạt động DN = dữ liệu khách → CHỈ local (R2 no-failover).
+        # FR-08 — tư vấn tuân thủ: hoạt động DN = dữ liệu khách → egress LOCAL trong service.
         need(ctx, "lawyer", "reviewer", "owner")
-        tid, intent = audited(svc, ctx, "advise", data_class="client-sensitive",
-                              destination="local", resource="advisory")
-        if not svc.local_gateway.healthy():
-            svc.audit.confirm(intent, "denied")
-            return {"abstain": True, "reason": "local_unavailable",
-                    "ai_label": True, "trace_id": tid}
-        from ..w6 import ComplianceAdvisoryService
-        a = ComplianceAdvisoryService(svc.s, gateway=svc.local_gateway, nli=svc.nli).advise(
-            body.activity, parse_date(body.as_of), tenant_id=ctx.tenant_id, lang=body.lang)
-        svc.audit.confirm(intent, "done")
+        a, tid = svc.advise(body.activity, parse_date(body.as_of), ctx, lang=body.lang)
         return {"abstain": a.abstain, "reason": a.reason, "advice": a.advice,
                 "citations": a.citations, "ai_label": a.ai_label, "route": "local",
                 "trace_id": tid, "hitl_required": True}   # high-stakes → người xác nhận
@@ -376,10 +327,9 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
                  ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
         # FR-35.13 — thời hiệu/thời hạn tố tụng@as_of (neo điều luật, lùi ngày nghỉ).
         need(ctx, "viewer", "lawyer", "reviewer", "owner")
-        from ..tools.deadlines import compute_deadline
         a = parse_date(as_of, default=dt.date.today())
         try:
-            r = compute_deadline(svc.s, kind, parse_date(start), a)
+            r = svc.deadline(kind, parse_date(start), a)
         except LookupError as e:
             raise HTTPException(404, str(e))
         return {"kind": r.kind, "moc_bat_dau": r.moc_bat_dau.isoformat(),
@@ -392,10 +342,8 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
                 ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
         # FR-36 — so MỘT văn bản tại HAI ngày bất kỳ (bitemporal diff, KB công).
         need(ctx, "viewer", "lawyer", "reviewer", "owner")
-        from ..w6 import ComplianceDiffService
         try:
-            diffs = ComplianceDiffService(svc.s).diff(
-                frbr, parse_date(a), parse_date(b), lang)
+            diffs = svc.compare(frbr, parse_date(a), parse_date(b), lang)
         except LookupError as e:
             raise HTTPException(404, str(e))
         return {"frbr": frbr, "as_of_a": a, "as_of_b": b,
@@ -405,17 +353,11 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     @app.post("/judgment")
     def judgment(body: JudgmentRequest, ctx: TenantContext = Depends(auth),
                  svc: LegalService = Depends(get_service)):
-        # FR-03 — second-opinion bản án: CHỈ cờ điều ràng buộc đúng tình huống còn hiệu lực
-        # mà bản án không viện (CN-03 high-risk → HITL + audit; chiều tuỳ nghi → abstain).
+        # FR-03 — second-opinion bản án (CN-03 high-risk → audit + HITL trong service).
         need(ctx, "lawyer", "reviewer", "owner")
-        # CN-03 (QĐ 33/2026): high-risk → BẮT BUỘC logging. Audit write-ahead + confirm.
-        tid, intent = audited(svc, ctx, "judgment", data_class="case-review",
-                              destination="none", resource="judgment")
-        from ..w6 import JudgmentAnalysisService
-        f = JudgmentAnalysisService(svc.s).analyze(
-            body.cited_eids, body.expected_governing, parse_date(body.as_of),
-            cited_precedents=body.cited_precedents)
-        svc.audit.confirm(intent, "done")
+        f, tid = svc.judgment(body.cited_eids, body.expected_governing,
+                              parse_date(body.as_of), ctx,
+                              cited_precedents=body.cited_precedents)
         return {"flagged": f.flagged, "reason": f.reason,
                 "missing_binding": f.missing_binding,
                 "missing_precedents": f.missing_precedents,   # CN-04 án lệ ràng buộc
