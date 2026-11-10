@@ -18,7 +18,7 @@ from traluat.w5.api import create_app
 D = dt.date
 SECRET = "s3cret"
 FRBR = "trl:vn/nd/99/2020"
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 
 def _tok(**claims) -> str:
@@ -132,6 +132,22 @@ def test_graph_endpoint(client):
     d = r.json()
     assert d["center"] == "nd99__dieu_1"
     assert any(n["eid"] == "nd99__dieu_1" for n in d["nodes"])   # FR-37 graph data
+
+
+def test_directory_nearby_endpoint(client):
+    pytest.importorskip("geoalchemy2")
+    from traluat.w1.directory import add_directory_entry
+
+    # chèn 1 mục qua session của service (client fixture dùng chung session s)
+    from traluat.w5.api import get_service
+    gen = client.app.dependency_overrides[get_service]()
+    svc = next(gen)
+    add_directory_entry(svc.s, "toa_an", "TAND TP.HCM (api)",
+                        lat=10.7769, lon=106.7009, province="HCM")
+    r = client.get("/directory/nearby?lat=10.7769&lon=106.7009&radius_m=50000",
+                   headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='viewer')}"})
+    assert r.status_code == 200
+    assert any(x["name"] == "TAND TP.HCM (api)" for x in r.json())
 
 
 def test_alerts_subscribe_and_list(client):

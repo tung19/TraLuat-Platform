@@ -1,8 +1,9 @@
 # TraLuat — Postgres (SoR + L4 index) cho dev. Residency thật = đặt tại VN khi deploy.
-# pgvector/pgvector:pg16 = postgres:16 + extension `vector` (HNSW) cho L4 embedding.
+# Image gộp pgvector (HNSW L4) + PostGIS (FR-39 geo danh bạ) — build deploy/postgres.
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    build: ./deploy/postgres        # postgis/postgis:16 + postgresql-16-pgvector
+    image: traluat/postgres:pg16-vec-gis
     container_name: traluat-pg
     environment:
       POSTGRES_USER: traluat

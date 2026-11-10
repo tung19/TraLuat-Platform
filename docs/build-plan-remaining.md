@@ -5,13 +5,13 @@
 
 ---
 
-## WP1 — Data-plane: calculators (FR-35) ✅ · directory/geo (FR-39/40) ⏳ cần PostGIS
-**Mục tiêu:** 14 tiện ích tính + danh bạ LS/cơ quan, hiệu-lực-aware, RULE tier (không LLM).
-- **T1.1 Calculator registry** (`w1/calculators.py`): mỗi calc = hàm RULE trên `lookup_reference` (thuế/lương vùng/mức phạt/lệ phí/mã HS/ngành…) + số học; trả kết quả **kèm `source_eid`** (calculator-có-nguồn-luật). `classify_tier`→RULE route tới đây.
-- **T1.2 PostGIS geo** (FR-39): model `Directory(kind, name, address, geom POINT, phone, …)` + `nearby(lat,lon,radius)` KNN (`<->`). FR-40 danh bạ cơ quan (bảng thường).
-- **T1.3 Adapter + PII gate**: `upsert_reference`/`DocumentSource` cho dataset danh bạ (danh-bạ có liên hệ → `pii_check=True`).
-- **Test:** calc tax/penalty@as_of ra đúng số + source · nearby trả đúng bán kính · PII quarantine danh bạ.
-- **🔌 Cần-ngoài:** image Postgres có **cả pgvector + PostGIS** (đổi `pgvector/pgvector:pg16` → image gộp, hoặc cài postgis vào container) · **data thật** từ đội data (thuế suất/lương/mức phạt/danh bạ).
+## WP1 — Data-plane: calculators (FR-35) ✅ · directory/geo (FR-39/40) ✅ XONG
+**Mục tiêu:** tiện ích tính + danh bạ LS/cơ quan, hiệu-lực-aware, RULE tier (không LLM).
+- **T1.1 Calculator registry** ✅ (`w1/calculators.py`): mỗi calc = hàm RULE trên `lookup_reference` (thuế/lương vùng/mức phạt/lệ phí…) + số học; trả kết quả **kèm `source_eid`** (calculator-có-nguồn-luật). `classify_tier`→RULE.
+- **T1.2 PostGIS geo** ✅ (FR-39, `w1/directory.py`): model `Directory(kind,name,address,province,phone,email, geom Point/4326 GiST, extra)` + `nearby(lat,lon,radius_m, kind=)` KNN qua `ST_DWithin`/`ST_Distance` (::geography → mét) + API `GET /directory/nearby`. Image gộp **pgvector+PostGIS** (`deploy/postgres/Dockerfile`, compose `build:`).
+- **T1.3 PII gate** ✅: điện thoại/email là liên hệ NGHIỆP VỤ (được phép); chặn **CCCD 12 số** lọt danh bạ công → `DirectoryQuarantined`.
+- **Test** ✅: `test_pg_directory.py` (nearby bán kính + sắp gần→xa · lọc kind · contact nghiệp vụ OK / CCCD quarantine · kind không hợp lệ) + API nearby.
+- **🔌 Cần-ngoài:** **data thật** từ đội data (thuế suất/lương/mức phạt + toạ độ danh bạ thật). Hạ tầng PostGIS đã xong (image gộp).
 
 ## WP2 — Drafting & Templates (FR-34/38 · Draft/Petition service) ✅ XONG
 **Mục tiêu:** sinh đơn từ/biểu mẫu từ template, grounded, có nhãn AI.

@@ -239,7 +239,7 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
 
     @app.post("/review")
     def review(body: ReviewRequest, ctx: TenantContext = Depends(auth),
-               svc: LegalService = Depends(get_service)):  # noqa: ARG001
+               svc: LegalService = Depends(get_service)):
         need(ctx, "lawyer", "reviewer", "owner")
         from ..w6 import RequiredClauseRule, ReviewService
         rules = [RequiredClauseRule(**r) for r in (body.rules or _DEFAULT_REVIEW_RULES)]
@@ -260,6 +260,17 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         from ..knowledge_ops import approve_relation
         approve_relation(svc.s, rel_id)
         return {"approved": rel_id}
+
+    @app.get("/directory/nearby")
+    def directory_nearby(lat: float, lon: float, radius_m: float = 5000,
+                         kind: str | None = None, ctx: TenantContext = Depends(auth),
+                         svc: LegalService = Depends(get_service)):
+        # FR-39 — danh bạ LS/công chứng/toà gần toạ độ (KB công, không tình tiết khách).
+        from ..w1.directory import nearby
+        hits = nearby(svc.s, lat, lon, radius_m, kind=kind)
+        return [{"id": h.entry.id, "kind": h.entry.kind, "name": h.entry.name,
+                 "address": h.entry.address, "phone": h.entry.phone,
+                 "distance_m": round(h.distance_m, 1)} for h in hits]
 
     @app.post("/alerts/subscribe")
     def alerts_subscribe(body: SubscribeRequest, ctx: TenantContext = Depends(auth),
