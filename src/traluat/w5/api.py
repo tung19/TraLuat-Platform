@@ -32,6 +32,7 @@ body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0
 .abstain{color:#b91c1c;font-weight:600}.ai{font-size:.75rem;color:#64748b}
 textarea,input{font:inherit}</style></head>
 <body><h1>TraLuat — trợ lý pháp lý</h1>
+<p><a href="/graph">→ Đồ thị quan hệ quy phạm (FR-37)</a></p>
 <p>Nhập tình tiết + <b>ngày sự kiện</b> (không phải ngày hỏi). Kết quả có
 <b>trích dẫn điều–khoản tại ngày T</b> kèm trạng thái hiệu lực, hoặc
 <b>abstain</b> khi không đủ căn cứ. Mọi output gắn nhãn AI (Luật 71/2025).</p>
@@ -67,6 +68,62 @@ class AnalyzeRequest(BaseModel):
     # B5: local_available do service health-probe, không nhận từ client.
 
 
+_GRAPH_HTML = """<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<title>TraLuat — Đồ thị quy phạm</title>
+<script src="https://unpkg.com/cytoscape@3/dist/cytoscape.min.js"></script>
+<style>
+body{font-family:system-ui,sans-serif;margin:0}
+#bar{padding:.6rem 1rem;border-bottom:1px solid #e2e8f0;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+#cy{width:100vw;height:calc(100vh - 110px)}
+input{font:inherit;padding:.2rem .4rem}
+.lg span{font-size:.72rem;padding:.1rem .4rem;border-radius:.3rem;color:#fff;margin-right:.3rem}
+small{color:#64748b}
+</style></head><body>
+<div id="bar">
+<b>TraLuat · đồ thị quy phạm</b>
+Điều: <input id="eid" value="nd99__dieu_5" size="22">
+as_of: <input id="asof" type="date" value="2022-01-01">
+hops: <input id="hops" type="number" value="2" min="1" max="3" size="2">
+<button onclick="load()">Vẽ</button>
+Token: <input id="tok" size="28" placeholder="Bearer JWT">
+<span class="lg" id="lg"></span>
+</div>
+<div id="cy"></div>
+<p style="padding:0 1rem"><small>Click một node để mở rộng lân cận. Mũi tên = chiều quan hệ (src→dst). Màu theo loại.</small></p>
+<script>
+const COL={cites:'#64748b',guides:'#2563eb',repeals:'#b91c1c',replaces:'#ca8a04',conflicts:'#db2777',hierarchy:'#16a34a'};
+document.getElementById('lg').innerHTML=Object.entries(COL).map(([k,v])=>`<span style="background:${v}">${k}</span>`).join('');
+let cy;
+function hdr(){return {'Authorization':'Bearer '+document.getElementById('tok').value}}
+async function fetchGraph(eid){
+  const q=new URLSearchParams({as_of:asof.value,hops:hops.value});
+  const r=await fetch('/graph/'+encodeURIComponent(eid)+'?'+q,{headers:hdr()});
+  if(!r.ok){alert('Lỗi '+r.status);return null}
+  return r.json();
+}
+function toElements(d,center){
+  const els=[];const seen=new Set();
+  for(const n of d.nodes){if(seen.has(n.eid))continue;seen.add(n.eid);
+    els.push({data:{id:n.eid,label:n.label||n.eid},classes:n.eid===center?'ctr':''});}
+  for(const e of d.edges) els.push({data:{id:e.src+'>'+e.dst+'>'+e.type,source:e.src,target:e.dst,type:e.type}});
+  return els;
+}
+function render(els){
+  cy=cytoscape({container:document.getElementById('cy'),elements:els,
+   style:[
+    {selector:'node',style:{'label':'data(label)','font-size':'10px','background-color':'#0f172a','color':'#0f172a','text-valign':'bottom','text-wrap':'wrap','text-max-width':'120px','width':16,'height':16}},
+    {selector:'node.ctr',style:{'background-color':'#2563eb','width':24,'height':24,'font-weight':'bold'}},
+    {selector:'edge',style:{'width':2,'curve-style':'bezier','target-arrow-shape':'triangle','line-color':ele=>COL[ele.data('type')]||'#94a3b8','target-arrow-color':ele=>COL[ele.data('type')]||'#94a3b8','label':'data(type)','font-size':'8px','color':'#64748b'}}],
+   layout:{name:'cose',animate:false}});
+  cy.on('tap','node',async ev=>{const d=await fetchGraph(ev.target.id());if(!d)return;
+    cy.add(toElements(d,null).filter(e=>!cy.getElementById(e.data.id).length));
+    cy.layout({name:'cose',animate:false}).run();});
+}
+async function load(){const d=await fetchGraph(eid.value);if(!d)return;
+  if(cy)cy.destroy();render(toElements(d,d.center));}
+</script></body></html>"""
+
+
 def get_service() -> LegalService:   # placeholder — create_app/ test override
     raise RuntimeError("get_service chưa cấu hình")
 
@@ -97,6 +154,10 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     @app.get("/metrics", response_class=PlainTextResponse)
     def metrics_ep():                  # observability — scrape Prometheus
         return app.state.metrics.render()
+
+    @app.get("/graph", response_class=HTMLResponse)
+    def graph_view():                  # FR-37 — vẽ đồ thị quan hệ quy phạm (Cytoscape)
+        return _GRAPH_HTML
 
     @app.get("/graph/{eid}")
     def graph(eid: str, as_of: str | None = None, hops: int = 1,
