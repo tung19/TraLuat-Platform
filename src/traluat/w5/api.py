@@ -73,6 +73,12 @@ class ReviewRequest(BaseModel):
     rules: list[dict] | None = None   # [{name, any_of:[...]}], None → playbook mặc định
 
 
+class SubscribeRequest(BaseModel):
+    frbr: str                          # văn bản muốn theo dõi (FR-09)
+    channel: str | None = None         # record|webhook|email (mặc định record)
+    target: str | None = None          # URL webhook / email
+
+
 # playbook rà soát mặc định (FR Review / omission moat #2) — chuyên gia mở rộng (L14).
 _DEFAULT_REVIEW_RULES = [
     {"name": "bảo mật", "any_of": ["bảo mật", "giữ bí mật"]},
@@ -254,6 +260,36 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
         from ..knowledge_ops import approve_relation
         approve_relation(svc.s, rel_id)
         return {"approved": rel_id}
+
+    @app.post("/alerts/subscribe")
+    def alerts_subscribe(body: SubscribeRequest, ctx: TenantContext = Depends(auth),
+                         svc: LegalService = Depends(get_service)):
+        # FR-09 — theo dõi 1 văn bản; luật đổi → Alert (bảng khách, RLS theo tenant).
+        need(ctx, "lawyer", "reviewer", "owner")
+        import uuid as _uuid
+
+        from .alerts import subscribe
+        from .rls import set_tenant
+        set_tenant(svc.s, ctx.tenant_id)
+        sub = subscribe(svc.s, _uuid.UUID(ctx.tenant_id), body.frbr,
+                        channel=body.channel or "record", target=body.target)
+        return {"subscribed": body.frbr, "id": sub.id, "channel": sub.channel}
+
+    @app.get("/alerts")
+    def alerts_list(ctx: TenantContext = Depends(auth),
+                    svc: LegalService = Depends(get_service)):
+        # Hộp thư cảnh báo của tenant — RLS cô lập (không thấy alert tenant khác).
+        import sqlalchemy as _sa
+
+        from .models import Alert
+        from .rls import set_tenant
+        set_tenant(svc.s, ctx.tenant_id)
+        rows = svc.s.scalars(
+            _sa.select(Alert).order_by(Alert.created_at.desc())).all()
+        return [{"id": a.id, "frbr": a.frbr_uri, "change": a.change,
+                 "detail": a.detail, "delivered": a.delivered,
+                 "created_at": a.created_at.isoformat() if a.created_at else None}
+                for a in rows]
 
     @app.get("/graph/central")
     def graph_central(ctx: TenantContext = Depends(auth)):

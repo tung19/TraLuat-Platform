@@ -51,12 +51,13 @@
 - **Test:** render ảnh 2–3 dòng → detect+OCR ra đủ dòng (so với VietOCR dòng-đơn hiện tại).
 - **🔌 Cần-ngoài:** dep `paddleocr`/CRAFT + model download (safetensors) · ảnh mẫu thật.
 
-## WP7 — FR-09 Alert luật mới (gửi thông báo)
+## WP7 — FR-09 Alert luật mới (gửi thông báo) ✅ XONG
 **Mục tiêu:** phát hiện (đã có) → **gửi** cho người theo dõi.
-- **T7.1 Subscription model**: `alert_subscription(tenant_id, topic|frbr_uri, channel)` + RLS.
-- **T7.2 Alert pipeline**: hook sau `materialize` (như Neo4j sync) — quan hệ repeals/amends mới duyệt → sinh `alert(tenant, doc, change)` + **delivery** (webhook stub + email).
-- **Test:** materialize repeal → alert sinh cho subscriber · webhook payload đúng · không rò tenant (RLS).
-- **🔌 Cần-ngoài:** SMTP (email) · endpoint webhook khách.
+- **T7.1 Subscription model** ✅: `alert_subscription(tenant_id, frbr_uri, channel, target)` + `alert(tenant_id, frbr_uri, change, delivered)` — bảng khách FORCE RLS (migration `0012_alerts`).
+- **T7.2 Alert pipeline** ✅: `w5/alerts.py` — `Deliverer` port (Recording/Webhook) + `fan_out` + `enable_alert_sync()` đăng ký **post-materialize hook** (như Neo4j sync); repeals/replaces/amends đã duyệt → `Alert(tenant, frbr, change)` + deliver.
+- **API** ✅: `POST /alerts/subscribe` (lawyer/reviewer/owner) + `GET /alerts` (hộp thư, RLS cô lập).
+- **Test** ✅: `test_pg_alerts.py` (subscribe→repeal→alert+deliver · không subscriber→im · cites không sinh alert) · `test_pg_w5_api.py` (subscribe+list roundtrip · viewer 403).
+- **🔌 Cần-ngoài:** SMTP (email thật) · endpoint webhook khách (`WebhookDeliverer` đã có skeleton `post_fn`).
 
 ---
 

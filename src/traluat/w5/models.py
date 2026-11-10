@@ -58,6 +58,28 @@ class AuditLogRow(Base):
     meta: Mapped[dict | None] = mapped_column(JSONB)
 
 
+class AlertSubscription(Base):
+    """FR-09 — theo dõi 1 văn bản; luật đổi → sinh Alert. Bảng khách (RLS)."""
+    __tablename__ = "alert_subscription"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, nullable=False, index=True)
+    frbr_uri: Mapped[str] = mapped_column(index=True)
+    channel: Mapped[str] = mapped_column(default="record")   # record|webhook|email
+    target: Mapped[str | None]                               # URL webhook / email
+
+
+class Alert(Base):
+    __tablename__ = "alert"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, nullable=False, index=True)
+    frbr_uri: Mapped[str]
+    change: Mapped[str]                                      # repealed|replaced|amended
+    detail: Mapped[str | None]
+    created_at: Mapped[dt.datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now())
+    delivered: Mapped[bool] = mapped_column(default=False)
+
+
 class AnalysisTask(Base):
     """Task bất đồng bộ — bảng khách, tenant_id + FORCE RLS → /tasks/{id} chống IDOR
     (C6): fetch task tenant khác → RLS trả rỗng (không thấy)."""

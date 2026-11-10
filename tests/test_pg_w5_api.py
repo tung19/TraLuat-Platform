@@ -134,6 +134,22 @@ def test_graph_endpoint(client):
     assert any(n["eid"] == "nd99__dieu_1" for n in d["nodes"])   # FR-37 graph data
 
 
+def test_alerts_subscribe_and_list(client):
+    import uuid
+    tid = str(uuid.uuid4())
+    hdr = {"Authorization": f"Bearer {_tok(tenant_id=tid, role='lawyer')}"}
+    sub = client.post("/alerts/subscribe", json={"frbr": FRBR}, headers=hdr)
+    assert sub.status_code == 200 and sub.json()["subscribed"] == FRBR
+    lst = client.get("/alerts", headers=hdr)
+    assert lst.status_code == 200 and isinstance(lst.json(), list)   # hộp thư (rỗng tới khi có đổi)
+
+
+def test_alerts_subscribe_viewer_forbidden(client):
+    import uuid
+    hdr = {"Authorization": f"Bearer {_tok(tenant_id=str(uuid.uuid4()), role='viewer')}"}
+    assert client.post("/alerts/subscribe", json={"frbr": FRBR}, headers=hdr).status_code == 403
+
+
 def test_analyze_lawyer_ok(client):
     r = client.post("/analyze", json=BODY,
                     headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='lawyer')}"})
