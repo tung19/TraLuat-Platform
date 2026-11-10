@@ -10,7 +10,7 @@
 >
 > Trạng thái: `SPEC` = đã đặc tả, chưa code · `WIP` = một phần/khung · `DONE` (qua acceptance test) · `DEFER` (hoãn, có lý do).
 >
-> **🔄 Đối chiếu code 2026-11-10** (230 test xanh): cột *Trạng thái* dưới đây đã rà theo codebase thật (không còn để trống "SPEC" mặc định). Nguồn chi tiết: `status-audit-current.md`.
+> **🔄 Đối chiếu code 2026-11-10 (cập nhật Nhóm-1: +FR-14, +35.2/35.6/35.9, +CN-05)** (230 test xanh): cột *Trạng thái* dưới đây đã rà theo codebase thật (không còn để trống "SPEC" mặc định). Nguồn chi tiết: `status-audit-current.md`.
 > Nhóm: **MOAT** (huỷ diệt) · **PARITY** (ngang thị trường) · **BACKLOG** (nhóm 2, sau lõi) · **CONSTRAINT** (ràng buộc cứng, không phải tính năng nhưng cấm bỏ).
 
 ---
@@ -40,7 +40,7 @@
 | **FR-11** | Hỏi–đáp pháp lý grounded | W6 §1.3 (AssistantService) | ✅ **DONE** | `service.lookup` + `answer_question` + `/lookup`. |
 | **FR-12** | Phân rã cấu trúc Điều/Khoản/Điểm + eId | W1 Stage 3 | ✅ **DONE** | `w1/structure` + eId. |
 | **FR-13** | Đồ thị tri thức (dẫn chiếu/hướng dẫn/thứ bậc) | W2 §5.1 | ✅ **DONE** | `w2/repo` multihop CTE + Neo4j projection + GDS. |
-| **FR-14** | Tóm tắt VB / vụ việc | W4 / W6 | ❌ **SPEC** | CHƯA có service tóm tắt. |
+| **FR-14** | Tóm tắt VB / vụ việc | W4 / W6 | ✅ **DONE** | `service.summarize` (node=summary) + `/summarize` grounded cite-or-abstain. |
 | **FR-15** | Soạn hợp đồng song ngữ | W6 §1.2 (DraftService) | 🟡 **WIP** | Pipeline draft generic có (`/draft`), HĐ **song ngữ** riêng chưa. |
 | **FR-34** | **Soạn ĐƠN TỪ pháp lý theo mẫu** (khởi kiện/khiếu nại/tố giác…) — học từ kho mẫu (RAG, không fine-tune) | W6 §1.2b (PetitionDraftService) + DTP (L10) + TES (W3) | ✅ **DONE** | `PetitionDraftService` grounded + `/draft` (client→local) + template store. |
 | **FR-16** | Rà soát hợp đồng | W6 §1.1 (ReviewService) | ✅ **DONE** | `ReviewService` (chung FR-02). |
@@ -90,7 +90,7 @@
 
 | ID | Tính năng | Nguồn cảm hứng (TVPL) | Map | Trạng thái | Mình hơn ở |
 |---|---|---|---|:--:|---|
-| **FR-35** | **Legal utilities toolbox** — **14 mục, bảng chi tiết FR-35.x bên dưới** (35.13 là ⚡moat-item) | tiện ích TVPL | parity trên W2/W3 (+ 35.13 moat) | 🟡 **WIP** | registry `w1/calculators` chạy; **5/14 mục xong** (35.1/35.7/35.11 + lệ phí + ⚡35.13). |
+| **FR-35** | **Legal utilities toolbox** — **14 mục, bảng chi tiết FR-35.x bên dưới** (35.13 là ⚡moat-item) | tiện ích TVPL | parity trên W2/W3 (+ 35.13 moat) | 🟡 **WIP** | registry `w1/calculators` chạy; **8/14 mục xong** (35.1/35.2/35.6/35.7/35.9/35.11/35.12/35.13). |
 | **FR-36** | **Document compare (as-of)** — so 2 phiên bản / **2 ngày BẤT KỲ** của cùng VB, redline cấp điều–khoản | "so sánh văn bản" | **powered by FR-01** | ✅ **DONE** | `ComplianceDiffService.diff` + `/compare` + form `/tools`. |
 | **FR-37** | **Effectivity-aware relationship graph** — viz "gia phả" VB có **trục thời gian** (query in-force@T) | "lược đồ" | **powered by FR-13** | ✅ **DONE** | `/graph` Cytoscape time-travel + GDS overlay. |
 | **FR-38** | **Forms / biểu mẫu library** — kho mẫu tải được | "biểu mẫu" | nối FR-34 | 🟡 **WIP** | template store có; form có cấu trúc + validation chưa. |
@@ -104,14 +104,14 @@
 | ID | Tiện ích | TVPL | Trạng thái | Mình hơn (neo moat) |
 |---|---|:--:|:--:|---|
 | **35.1** | Tính thuế TNCN (auto BHXH 8%/BHYT 1.5%) | ✅ | ✅ **DONE** | `calculator("thue_tncn")` neo bậc thuế + as_of |
-| **35.2** | Tính thuế GTGT | ⚠️ | ❌ **SPEC** | chưa |
+| **35.2** | Tính thuế GTGT | ⚠️ | ✅ **DONE** | `calculator("thue_gtgt")` neo thuế-suất@T |
 | **35.3** | Tra cứu mã số thuế + tình trạng hoạt động | ✅ | ❌ **SPEC** | chưa (cần API thuế) |
 | **35.4** | Biểu thuế XNK (WTO/ASEAN) + tra mã HS | ✅ | ❌ **SPEC** | chưa |
 | **35.5** | Lịch nộp thuế/báo cáo | ⚠️ | ❌ **SPEC** | chưa (nền 35.14 đã có) |
-| **35.6** | Gross ↔ Net lương | ✅ | ❌ **SPEC** | chưa (dùng-nhiều, ưu tiên) |
+| **35.6** | Gross ↔ Net lương | ✅ | ✅ **DONE** | `calculator("gross_net")` TNCN luỹ tiến + BH + giảm-trừ, hiệu-lực@T |
 | **35.7** | Lương tối thiểu vùng (tỉnh/huyện) | ✅ | ✅ **DONE** | `calculator("luong_toi_thieu")` |
 | **35.8** | BHXH một lần / trợ cấp thất nghiệp | ⚠️ | ❌ **SPEC** | chưa |
-| **35.9** | Lương làm thêm giờ / ngày lễ | ⚠️ | ❌ **SPEC** | chưa (nền lịch/lễ đã có ở 35.14) |
+| **35.9** | Lương làm thêm giờ / ngày lễ | ⚠️ | ✅ **DONE** | `calculator("lam_them_gio")` hệ-số theo loại-ngày@T (neo BLLĐ) |
 | **35.10** | Tra cứu mã ngành nghề KD | ✅ | ❌ **SPEC** | chưa |
 | **35.11** | Tra cứu xử phạt giao thông | ✅ | ✅ **DONE** | `calculator("muc_phat")` neo NĐ@T |
 | **35.12** | Từ điển pháp lý / thuật ngữ | ⚠️ | ✅ **DONE** | `w1/termbank` VN-EN-ZH neo điều |
@@ -130,7 +130,7 @@
 | **CN-02** | Nhãn AI (Luật 71/2025, NĐ 142/2026) | W5 §3.4 | ✅ **DONE** |
 | **CN-03** | Judgment/điều-tra/kiểm-sát = rủi-ro-cao: HITL + logging (QĐ 33/2026) | compliance-vn | ✅ **DONE** (judgment/draft audit + hitl_required) |
 | **CN-04** | Án lệ **ràng buộc** (NQ 04/2019) | W2 §5.2 | 🟡 **WIP** — `precedent_store` + prune có; rule ràng-buộc riêng chưa |
-| **CN-05** | Nguồn được phép + bản án ẩn danh (NQ 03/2017) | W1 + data-handoff | 🟡 **WIP** — license-gate xong; **ẩn danh bản án chưa** |
+| **CN-05** | Nguồn được phép + bản án ẩn danh (NQ 03/2017) | W1 + data-handoff | ✅ **DONE** — license-gate + `w1/anonymize` áp khi ingest bản án |
 | **CN-06** | Mã hoá key-per-tenant + zero-retention (tuỳ tenant) | W5 §2.4 / §3.2 | ✅ **DONE** |
 
 ---
@@ -148,12 +148,12 @@
 ## 📊 Rollup trạng thái (đối chiếu code 2026-11-10)
 
 **41 FR chính + 14 mục FR-35.x + 6 CN:**
-- ✅ **DONE (24 FR)**: FR-01,02,03,05,06,07,09,10,11,12,13,16,17,19,21,22,23,24,25,26,27,28,29,30,34,36,37,39,40 *(≈29 incl. tiện ích)*
+- ✅ **DONE (26 FR)**: FR-01,02,03,05,06,07,09,10,11,12,13,16,17,19,21,22,23,24,25,26,27,28,29,30,34,36,37,39,40 *(≈29 incl. tiện ích)*
 - 🟡 **WIP (7)**: FR-04 (EN xong/ZH defer) · FR-15 (draft generic) · FR-18 (UI VI-only) · FR-20 (thiếu đo scan) · FR-35 (5/14) · FR-38 (thiếu form validation) · FR-41 (resolution xong/detection stub)
-- ❌ **SPEC chưa code (2)**: FR-08 ComplianceAdvisory · FR-14 Tóm tắt
+- ❌ **SPEC chưa code (1)**: FR-08 ComplianceAdvisory
 - 🔵 **DEFER theo spec (3+1)**: FR-31,32,33 + FR-04-ZH
-- **FR-35.x**: 5/14 DONE (35.1·35.7·35.11·35.12·35.13) · 35.14 WIP · 8 SPEC
-- **CN**: 4/6 DONE (01,02,03,06) · CN-04, CN-05 WIP
+- **FR-35.x**: 8/14 DONE (35.1·35.2·35.6·35.7·35.9·35.11·35.12·35.13) · 35.14 WIP · 5 SPEC
+- **CN**: 5/6 DONE (01,02,03,05,06) · CN-04 WIP
 
 **Chặn bởi NGOÀI (không code thêm được)**: vLLM/GPU · API key Claude · data thật (thuế/lương/phạt/toạ độ/template/gold) · authority_rank 2025 · meta.json thật · Paddle/boto3/hvac.
 
