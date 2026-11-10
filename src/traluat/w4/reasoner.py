@@ -80,11 +80,12 @@ class ReasoningEngine:
         return articles, chunk_by_eid
 
     # — Adjudicator: tổng hợp CHỈ trên verified; rỗng → abstain (H1) —
-    def _adjudicate(self, party, facts, as_of, verified, chunk_by_eid, lang):
+    def _adjudicate(self, party, facts, as_of, verified, chunk_by_eid, lang, tenant_id):
         if not verified:
             return PartyResult(party, abstain=True, reason="insufficient_basis")
         ctx = [chunk_by_eid[a.unit_eid] for a in verified if a.unit_eid in chunk_by_eid]
-        draft = self.gateway.generate(facts, ctx, as_of=as_of, node="adjudicator", lang=lang)
+        draft = self.gateway.generate(facts, ctx, as_of=as_of, node="adjudicator",
+                                      tenant_id=tenant_id, lang=lang)
         g = ground(self.s, draft.text, as_of, [c.unit_eid for c in draft.citations], lang, self.nli)
         if g.abstain:
             return PartyResult(party, abstain=True, reason=g.reason, relief=draft.text)
@@ -110,7 +111,7 @@ class ReasoningEngine:
             trail.extend(audit.trail)
             all_verified.extend(audit.verified_articles)
             results.append(self._adjudicate(
-                party, facts, as_of, audit.verified_articles, chunk_by_eid, lang))
+                party, facts, as_of, audit.verified_articles, chunk_by_eid, lang, tenant_id))
 
         draft = "\n\n".join(f"[{r.party}] {r.relief}" for r in results if r.relief)
         return Adjudication(

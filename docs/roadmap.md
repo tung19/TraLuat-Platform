@@ -89,7 +89,10 @@ Phase 5  Diện rộng + Portability      ──►  nuốt thị trường + n�
 - `auditor.audit`: cổng TIỀN-output 3 tầng — (1) trích dẫn có thật · (3) ngày hiệu lực (cắm `repo.citable_text`; TRANSITIONAL giữ+đánh dấu, H3 version-match; rớt → KHÔNG tốn lời gọi) · (2) **element-wise** (áp dụng ⇔ MỌI yếu tố thoả, không holistic) · `prune_unsupported`. `ElementJudge` port + stub. `audit_trail` giữ mọi điều + lý do loại.
 - `ReasoningEngine.analyze` (mode='single'): per-party `Researcher`(uỷ W3 `retrieve`)→`Auditor`→`Adjudicator`. Hợp đồng thu hẹp (verified ⊆ candidate), verified-set rỗng → **abstain insufficient_basis** (H1), cổng hậu-draft = W3 `ground`. Interface `Adjudication` cho W5/W6.
 
-**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search · conflict DETECTION (FR-41, model+gold) · W4 Reasoner đa vai LangGraph (mode='multi_role', Phase 4) · W5 backend/tenancy · W6 platform/JurisdictionPack.
+**W5 — Backend serving (slice-1: lõi bảo mật tất định) — XONG moat vận hành.**
+- `TenantContext` (ép tenant_id, RBAC `require_role`) · `EgressPolicy` (C1: phân loại provenance fail-closed; **R2: dữ liệu khách local-down → DENY/HITL, KHÔNG failover Claude**) · `AuditLog` write-ahead (C5, append-only, ghi route/residency không nội dung) · `LegalService` bọc `ReasoningEngine` (bất biến: không request thiếu tenant_id · mọi response có nhãn AI + trace_id · dữ liệu khách không ra Claude).
+
+**CHƯA CÓ KHUNG (net-new, cần build khi tới phase):** OCR (Vintern, ML) · L-MARS 6-lớp + Faith-Search · conflict DETECTION (FR-41, model+gold) · W4 Reasoner đa vai LangGraph (Phase 4) · W5 infra-lift (FastAPI/Celery/RLS `FORCE ROW LEVEL SECURITY`/KMS envelope — cắm trên `LegalService`) · W6 platform/JurisdictionPack/workflow UI.
 
 ---
 
