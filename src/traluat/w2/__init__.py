@@ -10,8 +10,11 @@ from .bitemporal import (
     reconstruct_as_of,
     repeal,
 )
+from .graph import GraphStore, PostgresGraphStore
 
 __all__ = [
+    "GraphStore",
+    "PostgresGraphStore",
     "BitemporalCorruption",
     "EffectStatus",
     "UnitVersion",

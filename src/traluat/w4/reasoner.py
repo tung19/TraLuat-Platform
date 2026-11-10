@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from ..w2 import repo
 from ..w2.bitemporal import EffectStatus
+from ..w2.graph import GraphStore, PostgresGraphStore
 from ..w3 import ground
 from ..w3.chunker import Chunk
 from ..w3.ports import LLMGateway, NLIVerifier
@@ -70,6 +71,7 @@ class ReasoningEngine:
         self, session: Session, *, gateway: LLMGateway,
         nli: NLIVerifier | None = None, element_judge: ElementJudge | None = None,
         elements_by_eid: dict[str, list[str]] | None = None, graph_hops: int = 1,
+        graph_store: GraphStore | None = None,
     ) -> None:
         self.s = session
         self.gateway = gateway
@@ -78,6 +80,7 @@ class ReasoningEngine:
         self.auditor = Auditor(session, element_judge)
         self.elements_by_eid = elements_by_eid or {}
         self.graph_hops = graph_hops   # R_chg: mở rộng ứng viên qua norm-graph (0=tắt)
+        self.graph = graph_store or PostgresGraphStore(session)  # ADR-0001: cắm AGE/Neo4j sau
 
     def _article(self, eid: str, as_of: dt.date, lang: str) -> Article | None:
         text = repo.reconstruct_as_of(self.s, eid, as_of, lang)
@@ -101,8 +104,8 @@ class ReasoningEngine:
         if self.graph_hops > 0:
             seen = {a.unit_eid for a in articles}
             for eid in list(seen):
-                for reached in repo.multihop(self.s, eid, ["cites", "guides"],
-                                             max_hops=self.graph_hops, as_of=as_of):
+                for reached in self.graph.multihop(eid, ["cites", "guides"],
+                                                   max_hops=self.graph_hops, as_of=as_of):
                     if reached in seen:
                         continue
                     art = self._article(reached, as_of, lang)

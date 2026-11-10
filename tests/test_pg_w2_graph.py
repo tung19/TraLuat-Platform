@@ -61,6 +61,16 @@ def test_neighborhood_subgraph(session: Session):
     assert {e["type"] for e in nb["edges"]} == {"guides", "cites"}
 
 
+def test_graphstore_port_matches_repo(session: Session):
+    # ADR-0001: PostgresGraphStore port cho CÙNG kết quả như repo (seam để đổi engine)
+    from traluat.w2 import PostgresGraphStore
+    _edge(session, "nd99__dieu_1", "nd99__dieu_5", "guides")
+    gs = PostgresGraphStore(session)
+    assert gs.multihop("nd99__dieu_1", ["guides"], as_of=D(2022, 1, 1)) == \
+           repo.multihop(session, "nd99__dieu_1", ["guides"], as_of=D(2022, 1, 1))
+    assert gs.neighborhood("nd99__dieu_5")["center"] == "nd99__dieu_5"
+
+
 def test_researcher_pulls_graph_linked_article(session: Session):
     # guides: Điều 1 → Điều 5. Query trúng Điều 1 (không trúng Điều 5) → multihop kéo Điều 5.
     _edge(session, "nd99__dieu_1", "nd99__dieu_5", "guides")
