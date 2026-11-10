@@ -16,7 +16,11 @@ Rà soát đối-nghịch code mới (L9 endpoints, deadlines/calendar, geo, ale
 
 ## ✅ F7 (test-infra — ĐÃ LÀM): tách DB test riêng `traluat_test` (yêu cầu của F2/F3)
 - `tests/conftest.py`: mỗi phiên drop+tạo `traluat_test` + **clone schema-only** từ dev (`pg_dump --schema-only`), set `DATABASE_URL`. Demo-seed đổ `traluat`, test chạy `traluat_test` → hết class seed-pollution.
-- **Phát hiện kèm**: chuỗi migration KHÔNG replay-được từ rỗng (0001 `create_all` dựng `document` đủ cột, 0005 `add_column source_hash` → trùng) — **lỗi fresh-deploy tiềm ẩn**. Clone schema-only né được; cần sửa migration cho CI/deploy sạch (ghi nhận, chưa sửa).
+- **F8 phát sinh (ĐÃ SỬA)**: chuỗi migration KHÔNG replay-được từ rỗng (0001 `create_all` dựng `document` đủ cột, 0005 `add_column source_hash` → trùng) — **lỗi fresh-deploy/CI**.
+
+## ✅ F8 (migration — ĐÃ SỬA): squash 13 migration → baseline replay-được
+- **Sửa**: thay 0001…0013 bằng MỘT `0001_baseline.py` dựng toàn schema đúng thứ tự (CREATE EXTENSION postgis → `create_all` mọi bảng [GiST/GIN/HNSW + extension qua event model] → role app + grants + FORCE RLS bảng khách). Diff schema baseline-vs-dev: **446/446 dòng khớp** (chỉ khác thứ-tự-cột `analysis_task.payload`, vô hại) → verified reproduce đúng.
+- DB dev đang chạy → `alembic stamp 0001_baseline --purge` (giữ seed). Fresh `alembic upgrade head` trên DB rỗng → OK (verified 2×). `conftest` chuyển sang `alembic upgrade head` (bỏ phụ thuộc docker/pg_dump). `prepend_sys_path = . src`.
 
 ## ⚠️ F3 (latent — GHI NHẬN): 4 test khác vẫn đếm-toàn-bảng
 - `test_pg_bitemporal`(UnitVersion) · `test_pg_w3_indexed`(Chunk) · `test_pg_w5_rls`(AuditLogRow) · `test_pg_phase_d_followup`(Document) dùng `count().select_from(...)` không `where`. Hiện XANH vì chưa seed các bảng đó. **Rủi ro**: seed sau này vào chúng → vỡ. Nên: DB test riêng, hoặc scope mọi count theo khoá. (Chưa sửa — không broken.)

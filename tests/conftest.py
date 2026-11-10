@@ -1,28 +1,26 @@
-"""Tách DB TEST khỏi DB dev (deep-audit #3 F2/F3).
+"""Tách DB TEST khỏi DB dev (deep-audit #3 F2/F3/F7).
 
 Toàn bộ test chạy trên database `traluat_test` RIÊNG — demo-seed (scripts/seed_*)
 đổ vào `traluat` (dev) KHÔNG còn làm vỡ test giả-định-bảng-rỗng.
 
-Cấp schema bằng **clone schema-only** của DB dev (pg_dump --schema-only) thay vì
-replay migration: chuỗi migration hiện KHÔNG replay-được từ rỗng (0001 `create_all`
-dựng `document` với cả cột `source_hash`, rồi 0005 `add_column` → trùng cột). Clone
-schema-only mirror đúng schema đang chạy (extension/RLS/GiST/grant) mà không chép data.
+Dựng schema bằng **alembic upgrade head** (chuỗi migration đã squash về baseline
+replay-được-từ-rỗng, F8) — không còn phụ thuộc docker/pg_dump. Mỗi phiên drop+tạo lại
+`traluat_test` rồi migrate → luôn khớp migration mới nhất.
 
-PG của repo chạy trong container (`traluat-pg`, đổi qua env `PG_CONTAINER`). Không có
-container/PG → bỏ qua lặng lẽ (mỗi test tự `pytest.skip` khi connect lỗi). KHÔNG set
-`DATABASE_URL` nếu dựng hụt → tránh âm thầm chạy test lên DB dev.
+Không có Postgres → bỏ qua lặng lẽ (mỗi test tự `pytest.skip` khi connect lỗi). Lỗi
+dựng KHÁC (migrate hỏng) → cảnh báo rõ + KHÔNG set DATABASE_URL (tránh âm thầm chạy
+test lên DB dev). Ghi đè URL qua env `TEST_DATABASE_URL`.
 """
 
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
+
+import sqlalchemy as sa
 
 _DEV_URL = "postgresql+psycopg://traluat:traluat@localhost:5433/traluat"
 _TEST_DB = "traluat_test"
-_DEV_DB = "traluat"
-_CONTAINER = os.environ.get("PG_CONTAINER", "traluat-pg")
 
 
 def _test_url() -> str:
@@ -33,34 +31,38 @@ def _test_url() -> str:
     return f"{head}/{_TEST_DB}"
 
 
-def _psql(db: str, sql: str) -> None:
-    subprocess.run(
-        ["docker", "exec", _CONTAINER, "psql", "-U", "traluat", "-d", db,
-         "-v", "ON_ERROR_STOP=1", "-c", sql],
-        check=True, capture_output=True, text=True)
+def _recreate_database(admin_url: str, name: str) -> None:
+    eng = sa.create_engine(admin_url, isolation_level="AUTOCOMMIT", future=True)
+    try:
+        with eng.connect() as c:
+            # image gộp (glibc mới) + volume cũ → template1 lệch collation → CREATE fail
+            try:
+                c.execute(sa.text("ALTER DATABASE template1 REFRESH COLLATION VERSION"))
+            except Exception:  # noqa: BLE001,S110 — best-effort; không được → CREATE tự báo
+                pass
+            c.execute(sa.text(f'DROP DATABASE IF EXISTS "{name}"'))   # mỗi phiên → tươi
+            c.execute(sa.text(f'CREATE DATABASE "{name}"'))
+    finally:
+        eng.dispose()
 
 
-def _provision() -> None:
-    """Drop + tạo lại `traluat_test` rồi clone schema-only từ dev (mỗi phiên → tươi)."""
-    # refresh collation (image glibc mới vs volume cũ) để CREATE/DROP DATABASE chạy
-    _psql(_DEV_DB, "ALTER DATABASE template1 REFRESH COLLATION VERSION")
-    _psql(_DEV_DB, f'DROP DATABASE IF EXISTS "{_TEST_DB}"')
-    _psql(_DEV_DB, f'CREATE DATABASE "{_TEST_DB}"')
-    # clone schema-only (extension + bảng + index + RLS + grant), KHÔNG data
-    clone = (f"pg_dump -U traluat --schema-only --no-owner {_DEV_DB} "
-             f"| psql -U traluat -d {_TEST_DB} -v ON_ERROR_STOP=1 -q")
-    subprocess.run(
-        ["docker", "exec", _CONTAINER, "sh", "-c", clone],
-        check=True, capture_output=True, text=True)
+def _migrate(url: str) -> None:
+    from alembic.config import Config
+
+    from alembic import command
+    os.environ["DATABASE_URL"] = url            # env.py đọc database_url() → URL test
+    command.upgrade(Config("alembic.ini"), "head")
 
 
 def pytest_configure(config):
+    admin = os.environ.get("DATABASE_URL", _DEV_URL)       # DB có sẵn để DROP/CREATE
+    test_url = _test_url()
     try:
-        _provision()
-    except FileNotFoundError:
-        return                                  # không có docker → test tự skip
-    except subprocess.CalledProcessError as e:
-        print(f"\n[conftest] KHÔNG dựng được DB test ({_TEST_DB}):\n{e.stderr}",
-              file=sys.stderr)
-        return                                  # KHÔNG set DATABASE_URL → không chạy lên dev
-    os.environ["DATABASE_URL"] = _test_url()    # mọi make_engine() → DB test
+        _recreate_database(admin, _TEST_DB)
+        _migrate(test_url)
+    except Exception as e:  # noqa: BLE001
+        msg = str(e).lower()
+        if "could not" not in msg and "connection" not in msg and "does not exist" not in msg:
+            print(f"\n[conftest] KHÔNG dựng được DB test ({_TEST_DB}): {e}", file=sys.stderr)
+        return                                  # không PG / lỗi → test tự skip
+    os.environ["DATABASE_URL"] = test_url                   # mọi make_engine() → DB test
