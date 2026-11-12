@@ -15,7 +15,7 @@ _FONT = Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf")
 if not _FONT.exists():
     pytest.skip("thiếu font Unicode để render ảnh test", allow_module_level=True)
 
-from traluat.w1.ocr_vietocr import VietOCREngine  # noqa: E402
+from traluat.w1.ocr_vietocr import VietOCREngine
 
 
 @pytest.fixture(scope="module")

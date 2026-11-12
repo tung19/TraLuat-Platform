@@ -8,8 +8,8 @@ Mỗi calc = hàm thuần trên `lookup_reference` (bảng tham chiếu đội d
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from sqlalchemy.orm import Session
 

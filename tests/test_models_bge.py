@@ -10,18 +10,17 @@ import pytest
 
 pytest.importorskip("sentence_transformers")
 
-from sqlalchemy.orm import Session  # noqa: E402
+import sqlalchemy as sa
+from sqlalchemy.orm import Session
 
-import sqlalchemy as sa  # noqa: E402
-
-from traluat.w1 import build_ingest, load_to_w2  # noqa: E402
-from traluat.w2.db import make_engine  # noqa: E402
-from traluat.w3 import reindex_document, retrieve, retrieve_indexed  # noqa: E402
-from traluat.w3.embed_bge import BgeM3Embedder  # noqa: E402
+from traluat.w1 import build_ingest, load_to_w2
+from traluat.w2.db import make_engine
+from traluat.w3 import reindex_document, retrieve, retrieve_indexed
+from traluat.w3.embed_bge import BgeM3Embedder
 
 D = dt.date
 FRBR = "trl:vn/nd/99/2020"
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 
 @pytest.fixture(scope="module")

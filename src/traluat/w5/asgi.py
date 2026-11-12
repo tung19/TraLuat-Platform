@@ -1,31 +1,53 @@
-"""ASGI entry — chạy `uvicorn traluat.w5.asgi:app`. Dev dùng Echo gateway (không key).
+"""Uvicorn factory: traluat.w5.asgi:app_from_env --factory.
 
-Prod: thay provider bằng ClaudeLLMGateway (local vLLM + Claude), audit PostgresAuditLog,
-session per-request bind traluat_app. Đây là wiring tối thiểu để stack chạy + /metrics
-scrape được.
+Validated auth, scoped transactions, local AI and durable metadata-only audit.
 """
 
 from __future__ import annotations
 
 import os
 
-from ..w2.db import make_session_factory
-from ..w3 import EchoLLMGateway
+from ..w2.db import make_engine, make_session_factory
+from ..w3.local_gateway import DisabledLLMGateway
+from .ai_runtime import load_runtime_ai
 from .api import create_app
+from .audit import DurablePostgresAuditLog
+from .auth import DEFAULT_AUDIENCE, DEFAULT_ISSUER
 from .metrics import Metrics
+from .rls import ensure_runtime_login, use_app_role
 from .service import LegalService
 
-_metrics = Metrics()
-_Session = make_session_factory()
 
+def build_runtime_app(
+    *, jwt_secret: str, session_factory=None, local_gateway=None,
+    claude_gateway=None, knowledge_session_factory=None,
+    jwt_issuer: str = DEFAULT_ISSUER, jwt_audience: str = DEFAULT_AUDIENCE,
+    retriever=None, nli=None,
+):
+    sessions = session_factory or make_session_factory()
+    metrics = Metrics()
+    local = local_gateway if local_gateway is not None else DisabledLLMGateway()
 
-def _provider():
-    s = _Session()
-    try:
-        yield LegalService(s, local_gateway=EchoLLMGateway(),
-                           claude_gateway=EchoLLMGateway(), metrics=_metrics)
-    finally:
-        s.close()
+    def provider():
+        with sessions() as session:
+            try:
+                ensure_runtime_login(session)
+                use_app_role(session)
+                yield LegalService(
+                    session, local_gateway=local, claude_gateway=claude_gateway,
+                    audit=DurablePostgresAuditLog(sessions), metrics=metrics,
+                    knowledge_session_factory=knowledge_session_factory,
+                    retriever=retriever, nli=nli,
+                )
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+
+    return create_app(
+        jwt_secret=jwt_secret, jwt_issuer=jwt_issuer, jwt_audience=jwt_audience,
+        service_provider=provider, metrics=metrics, neo4j_driver=_build_neo4j(),
+    )
 
 
 def _build_neo4j():
@@ -42,6 +64,21 @@ def _build_neo4j():
         return None
 
 
-app = create_app(
-    jwt_secret=os.environ.get("JWT_SECRET", "dev-secret-change-me-0123456789abcd"),
-    service_provider=_provider, metrics=_metrics, neo4j_driver=_build_neo4j())
+def app_from_env():
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        raise ValueError("DATABASE_URL must name a non-owner runtime login")
+    knowledge_url = os.environ.get("KNOWLEDGE_DATABASE_URL")
+    knowledge_sessions = (make_session_factory(make_engine(knowledge_url))
+                          if knowledge_url else None)
+    from .auth import validate_secret
+    validate_secret(os.environ.get("JWT_SECRET", ""))
+    ai = load_runtime_ai()
+    return build_runtime_app(
+        jwt_secret=os.environ.get("JWT_SECRET", ""),
+        session_factory=make_session_factory(make_engine(database_url)),
+        jwt_issuer=os.environ.get("JWT_ISSUER", DEFAULT_ISSUER),
+        jwt_audience=os.environ.get("JWT_AUDIENCE", DEFAULT_AUDIENCE),
+        knowledge_session_factory=knowledge_sessions,
+        local_gateway=ai.gateway, retriever=ai.retriever, nli=ai.nli,
+    )

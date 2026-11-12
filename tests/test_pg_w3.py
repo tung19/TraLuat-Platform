@@ -13,11 +13,11 @@ from traluat.w2 import repo
 from traluat.w2.bitemporal import EffectStatus
 from traluat.w2.db import make_engine
 from traluat.w2.models import Document, Unit, UnitVersion
-from traluat.w3 import build_chunks, ground, retrieve, verify_citation
+from traluat.w3 import build_chunks, ground, retrieve
 
 D = dt.date
 FRBR = "trl:vn/nd/99/2020"
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 
 @pytest.fixture()
@@ -76,7 +76,10 @@ def test_gate3b_blocks_wrong_number(session: Session):
     _seed(session)
     eid = "nd99__dieu_3__khoan_1"  # '… 15 ngày làm việc'
 
-    ok = ground(session, "Doanh nghiệp phải nộp hồ sơ trong 15 ngày.", D(2022, 1, 1), [eid])
+    # Preserve the source's working-day qualifier; a bare citation is not proof
+    # of a paraphrase that silently drops legal conditions.
+    ok = ground(session, "Doanh nghiệp phải nộp hồ sơ trong thời hạn 15 ngày làm việc.",
+                D(2022, 1, 1), [eid])
     assert not ok.abstain and eid in ok.supported_eids
 
     bad = ground(session, "Doanh nghiệp phải nộp hồ sơ trong 30 ngày.", D(2022, 1, 1), [eid])
@@ -87,7 +90,8 @@ def test_gate3b_blocks_wrong_number(session: Session):
 def test_gate2_effectivity_and_sufficiency_floor(session: Session):
     _seed(session)
     repo.repeal(session, "nd99__dieu_5", D(2023, 6, 1))
-    claim = "Cơ quan đăng ký kinh doanh có thẩm quyền."
+    claim = repo.reconstruct_as_of(session, "nd99__dieu_5", D(2022, 1, 1))
+    assert claim is not None
 
     # còn hiệu lực 2022 → qua cổng
     assert not ground(session, claim, D(2022, 1, 1), ["nd99__dieu_5"]).abstain

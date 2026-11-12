@@ -8,14 +8,35 @@ State lưu eid (không object) → nạp lại Article từ W2. H4 persist: đi�
 
 from __future__ import annotations
 
+import copy
 import datetime as dt
+import hashlib
+import json
 from typing import Protocol, runtime_checkable
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..w2.models import Base
+from ..w2.models import Base, Document, NormRelation, PrecedentRow, Unit, UnitVersion
+
+
+def knowledge_fingerprint(session) -> str:
+    """Bind resumed audits to canonical content, including in-place edge reviews.
+
+    Checkpointing is optional; favour correctness over a stale global cache.
+    A durable KB revision service may replace this full digest once available.
+    """
+    session.flush()
+    digest = hashlib.sha256()
+    for model in (Document, Unit, UnitVersion, NormRelation, PrecedentRow):
+        table = model.__table__
+        digest.update(table.name.encode())
+        for row in session.execute(sa.select(*table.columns).order_by(table.c.id)):
+            digest.update(json.dumps(list(row), ensure_ascii=False, default=str,
+                                     separators=(",", ":")).encode())
+            digest.update(b"\n")
+    return digest.hexdigest()
 
 
 class CrossTenantCheckpoint(RuntimeError):
@@ -39,12 +60,12 @@ class InMemoryCheckpointer:
 
     def save(self, thread_id: str, tenant_id: str, state: dict) -> None:
         _check_prefix(thread_id, tenant_id)
-        self._store[thread_id] = dict(state)
+        self._store[thread_id] = copy.deepcopy(state)
 
     def load(self, thread_id: str, tenant_id: str) -> dict | None:
         _check_prefix(thread_id, tenant_id)
         s = self._store.get(thread_id)
-        return dict(s) if s is not None else None
+        return copy.deepcopy(s) if s is not None else None
 
 
 class DebateCheckpoint(Base):
@@ -67,7 +88,7 @@ class PostgresCheckpointer:
             self.s.add(DebateCheckpoint(thread_id=thread_id, tenant_id=tenant_id, state=state))
         else:
             row.state = state
-            row.updated_at = dt.datetime.now(dt.timezone.utc)
+            row.updated_at = dt.datetime.now(dt.UTC)
         self.s.flush()
 
     def load(self, thread_id: str, tenant_id: str) -> dict | None:

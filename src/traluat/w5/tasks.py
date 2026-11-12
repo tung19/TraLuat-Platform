@@ -9,7 +9,8 @@ test được); CeleryTaskQueue = skeleton (worker thật rebuild session — c�
 from __future__ import annotations
 
 import uuid
-from typing import Callable, Protocol, runtime_checkable
+from collections.abc import Callable
+from typing import Protocol, runtime_checkable
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
@@ -35,7 +36,7 @@ class CeleryTaskQueue:
     def __init__(self, celery_app=None) -> None:
         self._app = celery_app
 
-    def submit(self, run: Callable[[], None]) -> None:  # noqa: ARG002
+    def submit(self, run: Callable[[], None]) -> None:
         raise NotImplementedError(
             "CeleryTaskQueue: đăng ký @app.task(rebuild session) + send_task — cắm khi có broker")
 

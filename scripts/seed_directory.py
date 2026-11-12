@@ -14,7 +14,7 @@ from pathlib import Path
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from traluat.w1.directory import Directory, DirectoryQuarantined, add_directory_entry
+from traluat.tools.directory import Directory, DirectoryQuarantined, add_directory_entry
 from traluat.w2.db import make_engine
 
 DEFAULT = Path(__file__).resolve().parent.parent / "data" / "seed" / "directory.jsonl"

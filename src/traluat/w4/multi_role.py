@@ -15,6 +15,8 @@ Viết lại sạch từ pattern LangGraph (PAKTON Apache-2.0, khác domain) —
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
 from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
@@ -22,6 +24,7 @@ from sqlalchemy.orm import Session
 from ..w2 import repo
 from ..w3.ports import LLMGateway, NLIVerifier
 from .auditor import ElementJudge
+from .checkpoint import knowledge_fingerprint
 from .reasoner import Adjudication, CaseInput, ReasoningEngine
 from .types import Article
 
@@ -66,13 +69,17 @@ class MultiRoleReasoner:
         element_judge: ElementJudge | None = None,
         elements_by_eid: dict[str, list[str]] | None = None,
         max_rounds: int = 3, top_k: int = 8,
+        audit_policy_version: str = "auditor-v2",
+        retriever=None,
     ) -> None:
         self.engine = ReasoningEngine(
             session, gateway=gateway, nli=nli,
-            element_judge=element_judge, elements_by_eid=elements_by_eid)
+            element_judge=element_judge, elements_by_eid=elements_by_eid,
+            retriever=retriever)
         self.roles = roles or DEFAULT_ROLES
         self.max_rounds = max_rounds
         self.top_k = top_k
+        self.audit_policy_version = audit_policy_version
 
     def _article_from_w2(self, eid: str, as_of: dt.date, lang: str) -> Article | None:
         text = repo.reconstruct_as_of(self.engine.s, eid, as_of, lang)
@@ -96,11 +103,29 @@ class MultiRoleReasoner:
         trail: list = []                          # B6: gom audit trail (giải trình debate)
         converged = False
         rnd = 0
+        binding = None
+        reusable_judge = False
+        if checkpointer is not None:
+            judge = self.engine.auditor.judge
+            reusable_judge = bool(getattr(judge, "checkpoint_version", None))
+            identity = {
+                "facts": case.facts, "parties": case.parties,
+                "facts_by_party": case.facts_by_party, "as_of": as_of.isoformat(),
+                "lang": lang, "elements": self.engine.elements_by_eid,
+                "roles": [(r.name, r.query_focus) for r in self.roles],
+                "top_k": self.top_k, "graph_hops": self.engine.graph_hops,
+                "judge": f"{type(judge).__module__}.{type(judge).__qualname__}",
+                "judge_version": getattr(judge, "checkpoint_version", None),
+                "policy": self.audit_policy_version,
+                "knowledge": knowledge_fingerprint(self.engine.s),
+            }
+            binding = hashlib.sha256(json.dumps(identity, sort_keys=True,
+                                                 ensure_ascii=False).encode()).hexdigest()
 
         # RESUME: nạp pool đã verify từ checkpoint → KHÔNG audit lại (H4 persist)
         if checkpointer is not None:
             ck = checkpointer.load(thread_id, tkey)
-            if ck:
+            if ck and reusable_judge and ck.get("binding") == binding:
                 for eid in ck.get("pool_eids", []):
                     art = self._article_from_w2(eid, as_of, lang)
                     if art is not None:
@@ -135,7 +160,8 @@ class MultiRoleReasoner:
 
             if checkpointer is not None:      # durable: lưu sau mỗi lượt (crash-safe)
                 checkpointer.save(thread_id, tkey,
-                                  {"round": rnd, "pool_eids": list(pool), "converged": not added})
+                                  {"round": rnd, "pool_eids": list(pool),
+                                   "converged": not added, "binding": binding})
             if not added:                 # hội tụ: trọn lượt không thêm căn cứ verified
                 converged = True
                 break

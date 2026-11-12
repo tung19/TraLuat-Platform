@@ -9,13 +9,14 @@ from traluat.w3 import ClaudeLLMGateway, EchoLLMGateway, NotConfigured, wrap_unt
 from traluat.w3.gateway import TenantLeak
 
 D = dt.date
+_DEFAULT_AS_OF = D(2022, 1, 1)
 
 
 @dataclass
 class FakeChunk:
     unit_eid: str
     span_text: str
-    as_of: dt.date = D(2022, 1, 1)
+    as_of: dt.date = _DEFAULT_AS_OF
     tenant_id: str | None = None
 
 

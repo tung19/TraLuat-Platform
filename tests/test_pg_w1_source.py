@@ -3,6 +3,8 @@ không chặn mẻ."""
 
 from __future__ import annotations
 
+import datetime as dt
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -10,10 +12,8 @@ from traluat.w1 import InMemorySource, RawDocument, ingest_source
 from traluat.w2 import repo
 from traluat.w2.db import make_engine
 
-import datetime as dt
-
 D = dt.date
-from tests.test_w1_metadata import FULL_ND  # noqa: E402
+from tests.test_w1_metadata import FULL_ND
 
 
 @pytest.fixture()

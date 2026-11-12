@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import uuid
+from dataclasses import replace
 
 import jwt
 import pytest
@@ -16,13 +18,26 @@ from traluat.w5 import LegalService
 from traluat.w5.api import create_app
 
 D = dt.date
-SECRET = "s3cret"
+SECRET = "test-private-signing-key-at-least-32-bytes"
 FRBR = "trl:vn/nd/99/2020"
 from tests.test_w1_structure import SAMPLE
 
 
 def _tok(**claims) -> str:
+    now = dt.datetime.now(dt.UTC)
+    role = claims.get("role", "viewer")
+    claims = {"iss": "traluat", "aud": "traluat-api", "iat": now,
+              "exp": now + dt.timedelta(minutes=10), "sub": f"fixture:{role}", **claims}
+    if claims.get("tenant_id") == "t1":
+        claims["tenant_id"] = str(uuid.UUID(int=1))
     return jwt.encode(claims, SECRET, algorithm="HS256")
+
+
+def _fixture_identity(_session, ctx):
+    """Route-unit fixtures; real membership/RLS wiring is tested separately."""
+    role = ctx.subject.removeprefix("fixture:")
+    return replace(ctx, role="owner" if role == "operator" else role,
+                   platform_operator=role == "operator")
 
 
 class _DownEcho(EchoLLMGateway):
@@ -41,7 +56,8 @@ def _make_client(local_gateway):
     def provider():
         yield LegalService(s, local_gateway=local_gateway, claude_gateway=EchoLLMGateway())
 
-    app = create_app(jwt_secret=SECRET, service_provider=provider)
+    app = create_app(jwt_secret=SECRET, service_provider=provider,
+                     identity_verifier=_fixture_identity)
     return TestClient(app), (s, trans, conn)
 
 
@@ -59,7 +75,8 @@ def client():
     def provider():
         yield LegalService(s, local_gateway=EchoLLMGateway(), claude_gateway=EchoLLMGateway())
 
-    app = create_app(jwt_secret=SECRET, service_provider=provider)
+    app = create_app(jwt_secret=SECRET, service_provider=provider,
+                     identity_verifier=_fixture_identity)
     try:
         yield TestClient(app)
     finally:
@@ -122,7 +139,10 @@ def test_review_viewer_forbidden(client):
 def test_review_queue(client):
     r = client.get("/review/queue",
                    headers={"Authorization": f"Bearer {_tok(tenant_id='t1', role='reviewer')}"})
-    assert r.status_code == 200 and isinstance(r.json(), list)   # HITL queue
+    assert r.status_code == 403  # tenant roles cannot administer the shared KB
+    r = client.get("/review/queue", headers={"Authorization":
+        f"Bearer {_tok(tenant_id='t1', role='operator')}"})
+    assert r.status_code == 200 and isinstance(r.json(), list)
 
 
 def test_graph_endpoint(client):
@@ -196,9 +216,11 @@ def test_tools_page_english(client):
 def test_deadline_endpoint(client):
     import datetime as _dt
 
+    from tests.reference_helpers import seed_reference_sources
     from traluat.tools.reference import RefRow, upsert_reference
     from traluat.w5.api import get_service
     svc = next(client.app.dependency_overrides[get_service]())
+    seed_reference_sources(svc.s, ["bltts2015__dieu_273"])
     upsert_reference(svc.s, "thoi_hieu", [
         RefRow("khang_cao_so_tham_ds", {"value": 15, "unit": "day"},
                _dt.date(2016, 7, 1), None, "bltts2015__dieu_273")], pii_check=False)
@@ -314,7 +336,8 @@ def _client_shared_audit():
     def provider():
         yield svc                                       # cùng 1 service → audit dùng chung
 
-    app = create_app(jwt_secret=SECRET, service_provider=provider)
+    app = create_app(jwt_secret=SECRET, service_provider=provider,
+                     identity_verifier=_fixture_identity)
     return TestClient(app), audit, (s, trans, conn)
 
 

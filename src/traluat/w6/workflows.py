@@ -89,10 +89,11 @@ class PetitionDraftService:
     """FR-34 — soạn đơn từ TEMPLATE, GROUNDED (chỉ-từ-template + điều luật truy xuất),
     cite-or-abstain, nhãn AI. Dữ liệu khách → egress local (qua gateway truyền vào)."""
 
-    def __init__(self, session: Session, *, gateway, nli=None) -> None:
+    def __init__(self, session: Session, *, gateway, nli=None, retriever=None) -> None:
         self.s = session
         self.gateway = gateway
         self.nli = nli
+        self.retriever = retriever
 
     def draft(self, kind: str, facts: str, as_of: dt.date, *,
               tenant_id: str | None = None, lang: str = "vi", top_k: int = 5) -> DraftResult:
@@ -103,12 +104,12 @@ class PetitionDraftService:
         if not tpls:
             return DraftResult(True, reason="no_template")
         tpl = tpls[0]
-        cands = retrieve(self.s, facts, as_of, lang=lang, top_k=top_k)
+        cands = (self.retriever or retrieve)(self.s, facts, as_of, lang=lang, top_k=top_k)
         prompt = f"MẪU ĐƠN:\n{tpl.body}\n\nTÌNH TIẾT:\n{facts}\n\nĐiền mẫu, viện dẫn điều luật."
         d = self.gateway.generate(prompt, cands, as_of=as_of, node="draft",
                                   tenant_id=tenant_id, lang=lang)
         allowed = {c.unit_eid for c in cands}
-        cited = [c.unit_eid for c in d.citations if c.unit_eid in allowed]
+        cited = [c for c in d.citations if c.unit_eid in allowed]
         g = ground(self.s, d.text, as_of, cited, lang, self.nli)
         if g.abstain:
             return DraftResult(True, reason=g.reason, text=d.text, template_id=tpl.id)
@@ -130,15 +131,16 @@ class ComplianceAdvisoryService:
     → egress LOCAL (gateway truyền vào). High-stakes → abstain khi không đủ căn cứ.
     """
 
-    def __init__(self, session: Session, *, gateway, nli=None) -> None:
+    def __init__(self, session: Session, *, gateway, nli=None, retriever=None) -> None:
         self.s = session
         self.gateway = gateway
         self.nli = nli
+        self.retriever = retriever
 
     def advise(self, activity: str, as_of: dt.date, *,
                tenant_id: str | None = None, lang: str = "vi", top_k: int = 8) -> AdvisoryResult:
         from ..w3 import ground, retrieve
-        cands = retrieve(self.s, activity, as_of, lang=lang, top_k=top_k)
+        cands = (self.retriever or retrieve)(self.s, activity, as_of, lang=lang, top_k=top_k)
         if not cands:
             return AdvisoryResult(True, reason="insufficient_retrieval")
         prompt = (f"HOẠT ĐỘNG DOANH NGHIỆP:\n{activity}\n\nĐối chiếu điều luật liên quan: "
@@ -146,7 +148,7 @@ class ComplianceAdvisoryService:
         d = self.gateway.generate(prompt, cands, as_of=as_of, node="advisory",
                                   tenant_id=tenant_id, lang=lang)
         allowed = {c.unit_eid for c in cands}
-        cited = [c.unit_eid for c in d.citations if c.unit_eid in allowed]
+        cited = [c for c in d.citations if c.unit_eid in allowed]
         g = ground(self.s, d.text, as_of, cited, lang, self.nli)
         if g.abstain:
             return AdvisoryResult(True, reason=g.reason, advice=d.text)

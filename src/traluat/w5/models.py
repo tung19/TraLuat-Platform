@@ -36,8 +36,19 @@ class TenantUser(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(sa.ForeignKey("tenant.id"), index=True)
     email: Mapped[str]
+    auth_subject: Mapped[str | None]  # stable issuer subject; legacy rows require provisioning
     role: Mapped[str] = mapped_column(default="viewer")           # owner|lawyer|reviewer|viewer
-    __table_args__ = (sa.UniqueConstraint("tenant_id", "email", name="uq_tenant_user"),)
+    __table_args__ = (
+        sa.UniqueConstraint("tenant_id", "email", name="uq_tenant_user"),
+        sa.UniqueConstraint("tenant_id", "auth_subject", name="uq_tenant_user_subject"),
+    )
+
+
+class PlatformOperator(Base):
+    """Provisioned outside tenant administration; app may only read its own identity."""
+    __tablename__ = "platform_operator"
+    auth_subject: Mapped[str] = mapped_column(primary_key=True)
+    enabled: Mapped[bool] = mapped_column(default=True, server_default=sa.true())
 
 
 class AuditLogRow(Base):
@@ -66,6 +77,8 @@ class AlertSubscription(Base):
     frbr_uri: Mapped[str] = mapped_column(index=True)
     channel: Mapped[str] = mapped_column(default="record")   # record|webhook|email
     target: Mapped[str | None]                               # URL webhook / email
+    created_at: Mapped[dt.datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now())
 
 
 class Alert(Base):
@@ -78,6 +91,9 @@ class Alert(Base):
     created_at: Mapped[dt.datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now())
     delivered: Mapped[bool] = mapped_column(default=False)
+    source_relation_id: Mapped[int | None] = mapped_column(sa.ForeignKey("norm_relation.id"))
+    __table_args__ = (sa.UniqueConstraint("tenant_id", "source_relation_id",
+                                         name="uq_alert_tenant_relation"),)
 
 
 class AnalysisTask(Base):

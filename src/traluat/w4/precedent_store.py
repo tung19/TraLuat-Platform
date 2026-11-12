@@ -34,15 +34,15 @@ def add_precedent(
 
 def binding_precedents(session: Session, situation_eids: list[str], as_of):
     """CN-04 — án lệ RÀNG BUỘC tại `as_of` áp vào tình huống: tựa ≥1 eid trong
-    `situation_eids` VÀ đã có hiệu lực (effective_from ≤ as_of, hoặc NULL=chưa rõ→áp).
+    `situation_eids` VÀ ngày hiệu lực đã biết, effective_from ≤ as_of.
     Án lệ công bố là ràng buộc thực tế (không under-weight)."""
     if not situation_eids:
         return []
     rows = session.scalars(
         sa.select(PrecedentRow).where(
             PrecedentRow.cited_eids.op("?|")(array(situation_eids)),
-            sa.or_(PrecedentRow.effective_from.is_(None),
-                   PrecedentRow.effective_from <= as_of))).all()
+            PrecedentRow.effective_from.is_not(None),
+            PrecedentRow.effective_from <= as_of)).all()
     return [Precedent(precedent_id=r.precedent_id, cited_unit_eids=list(r.cited_eids),
                       situation=r.situation or "", solution=r.solution or "")
             for r in rows]

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 _ROMAN = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
 
@@ -56,11 +56,15 @@ def parse_structure(text: str, doc_slug: str) -> list[ParsedUnit]:
 
     units: list[ParsedUnit] = []
     cur_container: str | None = None   # chương/mục đang mở (parent cây của Điều)
+    cur_chuong: str | None = None
     cur_dieu: str | None = None
     cur_khoan: str | None = None
+    cur_diem: str | None = None
     by_eid: dict[str, ParsedUnit] = {}
 
     def add(u: ParsedUnit) -> None:
+        if u.eid in by_eid:
+            raise ValueError(f"đơn vị trùng eId, cần duyệt cấu trúc: {u.eid}")
         units.append(u)
         by_eid[u.eid] = u
 
@@ -69,30 +73,34 @@ def parse_structure(text: str, doc_slug: str) -> list[ParsedUnit]:
             n = _roman_to_int(m.group(1)) if not m.group(1).isdigit() else int(m.group(1))
             eid = f"{doc_slug}__chuong_{n}"
             add(ParsedUnit(eid, "chuong", n, f"Chương {m.group(1).upper()}", None, None))
-            cur_container, cur_dieu, cur_khoan = eid, None, None
+            cur_chuong = cur_container = eid
+            cur_dieu = cur_khoan = cur_diem = None
         elif (m := _RE_MUC.match(ln)):
             n = int(m.group(1))
-            eid = f"{doc_slug}__muc_{n}"
-            add(ParsedUnit(eid, "muc", n, f"Mục {n}", cur_container, None))
-            cur_container, cur_dieu, cur_khoan = eid, None, None
+            eid = f"{cur_chuong or doc_slug}__muc_{n}"
+            add(ParsedUnit(eid, "muc", n, f"Mục {n}", cur_chuong, None))
+            cur_container = eid
+            cur_dieu = cur_khoan = cur_diem = None
         elif (m := _RE_DIEU.match(ln)):
             n = int(m.group(1))
             eid = f"{doc_slug}__dieu_{n}"
             title = m.group(2).strip()
             add(ParsedUnit(eid, "dieu", n, f"Điều {n}", cur_container, title or None))
-            cur_dieu, cur_khoan = eid, None
+            cur_dieu, cur_khoan, cur_diem = eid, None, None
         elif cur_dieu and (m := _RE_DIEM.match(ln)) and cur_khoan:
             letter = m.group(1).lower()
             eid = f"{cur_khoan}__diem_{letter}"
             add(ParsedUnit(eid, "diem", _diem_ord(letter), letter, cur_khoan, m.group(2).strip()))
+            cur_diem = eid
         elif cur_dieu and (m := _RE_KHOAN.match(ln)):
             n = int(m.group(1))
             eid = f"{cur_dieu}__khoan_{n}"
             add(ParsedUnit(eid, "khoan", n, str(n), cur_dieu, m.group(2).strip()))
             cur_khoan = eid
+            cur_diem = None
         else:
             # dòng nối tiếp → gắn vào đơn vị nội dung gần nhất
-            tgt = cur_khoan or cur_dieu
+            tgt = cur_diem or cur_khoan or cur_dieu
             if tgt and by_eid[tgt].text is not None:
                 by_eid[tgt].text += " " + ln
             elif tgt:

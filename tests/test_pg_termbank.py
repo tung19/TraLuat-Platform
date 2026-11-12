@@ -8,6 +8,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
+from tests.reference_helpers import seed_reference_sources
 from traluat.tools.termbank import add_term, lookup_term
 from traluat.w2.db import make_engine
 
@@ -25,6 +26,7 @@ def session():
         trans.rollback(); conn.close()
         pytest.skip("reference_value chưa migrate")
     s = Session(bind=conn, future=True)
+    seed_reference_sources(s, ['nd99__dieu_3'])
     try:
         yield s
     finally:

@@ -1,68 +1,51 @@
-"""Tách DB TEST khỏi DB dev (deep-audit #3 F2/F3/F7).
+"""Opt-in integration DB setup. Never create, drop, or connect to the dev DB.
 
-Toàn bộ test chạy trên database `traluat_test` RIÊNG — demo-seed (scripts/seed_*)
-đổ vào `traluat` (dev) KHÔNG còn làm vỡ test giả-định-bảng-rỗng.
-
-Dựng schema bằng **alembic upgrade head** (chuỗi migration đã squash về baseline
-replay-được-từ-rỗng, F8) — không còn phụ thuộc docker/pg_dump. Mỗi phiên drop+tạo lại
-`traluat_test` rồi migrate → luôn khớp migration mới nhất.
-
-Không có Postgres → bỏ qua lặng lẽ (mỗi test tự `pytest.skip` khi connect lỗi). Lỗi
-dựng KHÁC (migrate hỏng) → cảnh báo rõ + KHÔNG set DATABASE_URL (tránh âm thầm chạy
-test lên DB dev). Ghi đè URL qua env `TEST_DATABASE_URL`.
+Set TEST_DATABASE_URL to an existing disposable database named *_test or test_*.
+Its schema is migrated in place; fixtures roll their data back. Without that explicit
+setting DB tests use an unreachable local URL and skip; pure tests remain available.
 """
-
 from __future__ import annotations
 
 import os
-import sys
 
-import sqlalchemy as sa
+import pytest
+from sqlalchemy.engine import make_url
 
-_DEV_URL = "postgresql+psycopg://traluat:traluat@localhost:5433/traluat"
-_TEST_DB = "traluat_test"
-
-
-def _test_url() -> str:
-    if os.environ.get("TEST_DATABASE_URL"):
-        return os.environ["TEST_DATABASE_URL"]
-    base = os.environ.get("DATABASE_URL", _DEV_URL)
-    head, _, _tail = base.rpartition("/")
-    return f"{head}/{_TEST_DB}"
+_DISABLED_URL = "postgresql+psycopg://disabled:disabled@127.0.0.1:1/traluat_test?connect_timeout=1"
 
 
-def _recreate_database(admin_url: str, name: str) -> None:
-    eng = sa.create_engine(admin_url, isolation_level="AUTOCOMMIT", future=True)
-    try:
-        with eng.connect() as c:
-            # image gộp (glibc mới) + volume cũ → template1 lệch collation → CREATE fail
-            try:
-                c.execute(sa.text("ALTER DATABASE template1 REFRESH COLLATION VERSION"))
-            except Exception:  # noqa: BLE001,S110 — best-effort; không được → CREATE tự báo
-                pass
-            c.execute(sa.text(f'DROP DATABASE IF EXISTS "{name}"'))   # mỗi phiên → tươi
-            c.execute(sa.text(f'CREATE DATABASE "{name}"'))
-    finally:
-        eng.dispose()
+def _test_url() -> str | None:
+    value = os.environ.get("TEST_DATABASE_URL")
+    if not value:
+        return None
+    url = make_url(value)
+    name = url.database or ""
+    if url.get_backend_name() != "postgresql" or not (
+        name.endswith("_test") or name.startswith("test_")
+    ):
+        raise ValueError("TEST_DATABASE_URL must name an existing PostgreSQL *_test or test_* database")
+    return value
 
 
 def _migrate(url: str) -> None:
     from alembic.config import Config
 
     from alembic import command
-    os.environ["DATABASE_URL"] = url            # env.py đọc database_url() → URL test
+
+    os.environ["DATABASE_URL"] = url
     command.upgrade(Config("alembic.ini"), "head")
 
 
 def pytest_configure(config):
-    admin = os.environ.get("DATABASE_URL", _DEV_URL)       # DB có sẵn để DROP/CREATE
-    test_url = _test_url()
+    # Install the safe value before validation/migration; failure cannot fall back to dev.
+    os.environ["DATABASE_URL"] = _DISABLED_URL
     try:
-        _recreate_database(admin, _TEST_DB)
-        _migrate(test_url)
-    except Exception as e:  # noqa: BLE001
-        msg = str(e).lower()
-        if "could not" not in msg and "connection" not in msg and "does not exist" not in msg:
-            print(f"\n[conftest] KHÔNG dựng được DB test ({_TEST_DB}): {e}", file=sys.stderr)
-        return                                  # không PG / lỗi → test tự skip
-    os.environ["DATABASE_URL"] = test_url                   # mọi make_engine() → DB test
+        test_url = _test_url()
+        if test_url:
+            os.environ["DATABASE_URL"] = test_url
+            _migrate(test_url)
+        elif os.environ.get("REQUIRE_TEST_DATABASE") == "1":
+            raise ValueError("TEST_DATABASE_URL is required for this test run")
+    except Exception as exc:
+        os.environ["DATABASE_URL"] = _DISABLED_URL
+        raise pytest.UsageError(f"Test database setup failed: {type(exc).__name__}") from exc

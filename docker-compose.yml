@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: traluat
       POSTGRES_DB: traluat
     ports:
-      - "5433:5432"   # 5433 host để tránh đụng pg local
+      - "127.0.0.1:5433:5432"   # local development only
     volumes:
       - traluat_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -23,12 +23,12 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: traluat-rmq
-    ports: ["5672:5672", "15672:15672"]
+    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672"]
     profiles: ["async"]      # `docker compose --profile async up` mới bật
   redis:
     image: redis:7
     container_name: traluat-redis
-    ports: ["6379:6379"]
+    ports: ["127.0.0.1:6379:6379"]
     profiles: ["async"]
   worker:
     image: python:3.12-slim
@@ -38,11 +38,12 @@ services:
     working_dir: /app
     volumes: ["./:/app"]
     environment:
-      DATABASE_URL: postgresql+psycopg://traluat:traluat@postgres:5432/traluat
+      DATABASE_URL: ${APP_DATABASE_URL:?Set a non-superuser login granted traluat_app}
       CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      TRALUAT_ENV: development
     command: >-
-      sh -c "pip install -e . && celery -A traluat.w5.celery_app.celery_app worker -l info"
+      sh -c "pip install -e '.[geo]' && celery -A traluat.w5.celery_app.celery_app worker -l info"
 
   # API + observability (profile 'obs'): `docker compose --profile obs up`
   api:
@@ -52,22 +53,34 @@ services:
     depends_on: [postgres]
     working_dir: /app
     volumes: ["./:/app"]
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]
     environment:
-      DATABASE_URL: postgresql+psycopg://traluat:traluat@postgres:5432/traluat
+      DATABASE_URL: ${APP_DATABASE_URL:?Set a non-superuser login granted traluat_app}
+      JWT_SECRET: ${JWT_SECRET:?Set a private JWT_SECRET before starting the API}
+      JWT_ISSUER: ${JWT_ISSUER:-traluat}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-traluat-api}
+      KNOWLEDGE_DATABASE_URL: ${KNOWLEDGE_DATABASE_URL:-}
+      TRALUAT_AI_MODE: ${TRALUAT_AI_MODE:-disabled}
+      TRALUAT_LOCAL_BACKEND: ${TRALUAT_LOCAL_BACKEND:-ollama}
+      TRALUAT_LOCAL_BASE_URL: ${TRALUAT_LOCAL_BASE_URL:-http://host.docker.internal:11434/v1}
+      TRALUAT_LOCAL_MODEL: ${TRALUAT_LOCAL_MODEL:-}
+      TRALUAT_MODELS_OFFLINE: ${TRALUAT_MODELS_OFFLINE:-1}
+      TRALUAT_EMBED_MODEL: ${TRALUAT_EMBED_MODEL:-BAAI/bge-m3}
+      TRALUAT_NLI_MODEL: ${TRALUAT_NLI_MODEL:-MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7}
+      TRALUAT_ENV: development
     command: >-
-      sh -c "pip install -e . && uvicorn traluat.w5.asgi:app --host 0.0.0.0 --port 8000"
+      sh -c "pip install -e '.[${TRALUAT_API_EXTRAS:-geo}]' && uvicorn traluat.w5.asgi:app_from_env --factory --host 0.0.0.0 --port 8000"
   prometheus:
     image: prom/prometheus
     container_name: traluat-prom
     profiles: ["obs"]
-    ports: ["9090:9090"]
+    ports: ["127.0.0.1:9090:9090"]
     volumes: ["./deploy/prometheus.yml:/etc/prometheus/prometheus.yml"]
   grafana:
     image: grafana/grafana
     container_name: traluat-grafana
     profiles: ["obs"]
-    ports: ["3000:3000"]
+    ports: ["127.0.0.1:3000:3000"]
   # Neo4j projection (ADR-0001 option c) — đồ thị phái sinh từ norm_relation.
   neo4j:
     image: neo4j:5
@@ -76,7 +89,7 @@ services:
     environment:
       NEO4J_AUTH: neo4j/traluat-neo4j-pw
       NEO4J_PLUGINS: '["graph-data-science"]'   # GDS: PageRank/community
-    ports: ["7474:7474", "7687:7687"]
+    ports: ["127.0.0.1:7474:7474", "127.0.0.1:7687:7687"]
 
 volumes:
   traluat_pgdata:

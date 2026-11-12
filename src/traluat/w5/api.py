@@ -11,13 +11,20 @@ LegalService (bind session/tenant) — prod nối DB thật, test override bằn
 from __future__ import annotations
 
 import datetime as dt
+from typing import Literal
 
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from .auth import decode_context
+from .auth import (
+    DEFAULT_AUDIENCE,
+    DEFAULT_ISSUER,
+    decode_context,
+    validate_secret,
+    verify_database_identity,
+)
 from .metrics import Metrics
 from .pages import (
     _DIRECTORY_HTML,
@@ -51,9 +58,10 @@ class SubscribeRequest(BaseModel):
 
 
 class LookupRequest(BaseModel):        # FR-11 Q&A grounded (KB công)
-    query: str
+    query: str = Field(min_length=1, max_length=8000)
     as_of: str
-    lang: str = "vi"
+    lang: Literal["vi", "en"] = "vi"
+    scope_frbr_uris: list[str] | None = Field(default=None, max_length=20)
 
 
 class SummarizeRequest(BaseModel):     # FR-14 tóm tắt grounded (KB công)
@@ -115,21 +123,38 @@ def get_service() -> LegalService:   # placeholder — create_app/ test override
 
 
 def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = None,
-               neo4j_driver=None) -> FastAPI:
+               neo4j_driver=None, jwt_issuer: str = DEFAULT_ISSUER,
+               jwt_audience: str = DEFAULT_AUDIENCE,
+               identity_verifier=verify_database_identity) -> FastAPI:
+    validate_secret(jwt_secret)
+    if not jwt_issuer or not jwt_audience:
+        raise ValueError("JWT issuer and audience must be configured")
     app = FastAPI(title="TraLuat API")
     app.dependency_overrides[get_service] = service_provider
     app.state.metrics = metrics or Metrics()
     app.state.neo4j_driver = neo4j_driver   # None → /graph/central trả {} (fallback degree)
 
-    def auth(authorization: str | None = Header(default=None)) -> TenantContext:
+    def token_context(authorization: str | None = Header(default=None)) -> TenantContext:
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(401, "missing bearer token")
         try:
-            return decode_context(authorization[7:], jwt_secret)
+            return decode_context(authorization[7:], jwt_secret,
+                                  issuer=jwt_issuer, audience=jwt_audience)
         except MissingTenant:
             raise HTTPException(401, "token thiếu tenant_id")
         except jwt.PyJWTError:
             raise HTTPException(401, "token không hợp lệ")
+
+    def auth(ctx: TenantContext = Depends(token_context),
+             svc: LegalService = Depends(get_service)) -> TenantContext:
+        try:
+            return identity_verifier(svc.s, ctx)
+        except jwt.PyJWTError:
+            raise HTTPException(401, "tài khoản hoặc tenant không còn quyền truy cập")
+
+    def need_platform(ctx: TenantContext) -> None:
+        if not ctx.platform_operator:
+            raise HTTPException(403, "cần quyền quản trị kho luật của platform")
 
     def need(ctx: TenantContext, *roles: str) -> None:
         try:
@@ -140,6 +165,23 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/ai/status")
+    def ai_status(ctx: TenantContext = Depends(auth), svc: LegalService = Depends(get_service)):
+        import sqlalchemy as sa
+
+        from ..w2.models import Chunk, Document
+        from ..w3.retrieval import IndexedRetriever
+        return {
+            "local_available": svc._local_healthy(),
+            "model": getattr(svc.local_gateway, "model_name", lambda: None)(),
+            "indexed_retrieval": isinstance(svc.retriever, IndexedRetriever),
+            "semantic_search": getattr(svc.retriever, "embedder", None) is not None,
+            "nli_enabled": svc.nli is not None,
+            "documents": svc.s.scalar(sa.select(sa.func.count()).select_from(Document)),
+            "public_index_chunks": svc.s.scalar(sa.select(sa.func.count()).select_from(Chunk)
+                                                 .where(Chunk.namespace == "kb")),
+        }
 
     @app.get("/", response_class=HTMLResponse)
     def index(lang: str = "vi"):       # W7 Experience + FR-18 song ngữ (?lang=en)
@@ -181,23 +223,34 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     @app.get("/review/queue")
     def review_queue(ctx: TenantContext = Depends(auth),
                      svc: LegalService = Depends(get_service)):
-        need(ctx, "reviewer", "owner")
+        need_platform(ctx)
         return [{"id": r.id, "type": r.relation_type, "confidence": r.confidence,
-                 "basis": r.confidence_basis} for r in svc.review_queue()]
+                 "basis": r.confidence_basis, "review_status": r.review_status,
+                 "needs_materialization": r.review_status == "approved" and r.materialized_at is None}
+                for r in svc.review_queue()]
 
     @app.post("/review/queue/{rel_id}/approve")
     def review_approve(rel_id: int, ctx: TenantContext = Depends(auth),
                        svc: LegalService = Depends(get_service)):
-        need(ctx, "reviewer", "owner")
-        svc.approve_relation(rel_id)
-        return {"approved": rel_id}
+        need_platform(ctx)
+        try:
+            applied = svc.approve_relation(rel_id, ctx)
+        except LookupError:
+            raise HTTPException(404, "quan hệ không tồn tại")
+        except RuntimeError:
+            raise HTTPException(503, "chưa cấu hình kết nối quản trị kho luật")
+        return {"approved": rel_id, "materialized": applied,
+                "needs_materialization": not applied}
 
     @app.get("/directory/nearby")
     def directory_nearby(lat: float, lon: float, radius_m: float = 5000,
                          kind: str | None = None, ctx: TenantContext = Depends(auth),
                          svc: LegalService = Depends(get_service)):
         # FR-39 — danh bạ LS/công chứng/toà gần toạ độ (KB công, không tình tiết khách).
-        hits = svc.nearby(lat, lon, radius_m, kind=kind)
+        try:
+            hits = svc.nearby(lat, lon, radius_m, kind=kind)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
         return [{"id": h.entry.id, "kind": h.entry.kind, "name": h.entry.name,
                  "address": h.entry.address, "phone": h.entry.phone,
                  "lat": h.lat, "lon": h.lon,
@@ -273,9 +326,10 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
     @app.post("/lookup")
     def lookup(body: LookupRequest, ctx: TenantContext = Depends(auth),
                svc: LegalService = Depends(get_service)):
-        # FR-11 — hỏi–đáp pháp lý KB CÔNG (không tình tiết khách) → egress có thể ra Claude.
+        # Raw questions remain tenant-sensitive and are routed to local inference.
         need(ctx, "viewer", "lawyer", "reviewer", "owner")
-        resp = svc.lookup(body.query, parse_date(body.as_of), ctx, lang=body.lang)
+        resp = svc.lookup(body.query, parse_date(body.as_of), ctx, lang=body.lang,
+                          scope_frbr_uris=body.scope_frbr_uris)
         a = resp.answer
         return {
             "answered": resp.answered, "trace_id": resp.trace_id, "ai_label": resp.ai_label,
@@ -283,6 +337,9 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
             "abstain": a.abstain if a else True,
             "text": (a.text if a and not a.abstain else ""),
             "citations": (a.citations if a else []),
+            "sources": a.sources if a else [], "as_of": body.as_of,
+            "model": a.model if a else None, "is_demo": a.is_demo if a else False,
+            "caveat": a.caveat if a else False, "needs_human": a.needs_human if a else False,
         }
 
     @app.post("/summarize")
@@ -298,6 +355,8 @@ def create_app(*, jwt_secret: str, service_provider, metrics: Metrics | None = N
             "abstain": a.abstain if a else True,
             "summary": (a.text if a and not a.abstain else ""),
             "citations": (a.citations if a else []),
+            "sources": a.sources if a else [], "as_of": body.as_of,
+            "model": a.model if a else None, "is_demo": a.is_demo if a else False,
         }
 
     @app.post("/draft")

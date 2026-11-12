@@ -13,7 +13,7 @@ from traluat.w2 import repo
 from traluat.w2.db import make_engine
 
 D = dt.date
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 
 @pytest.fixture()

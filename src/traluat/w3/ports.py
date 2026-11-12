@@ -17,6 +17,8 @@ from typing import Literal, Protocol, runtime_checkable
 class Citation:
     unit_eid: str
     anchor: dt.date | None = None   # None → orchestrator dùng as_of câu hỏi
+    claim: str | None = None        # một khẳng định trong draft (paraphrase)
+    quote: str | None = None        # nguyên văn hỗ trợ; phải khớp nguồn tại anchor
 
 
 @dataclass
@@ -38,7 +40,7 @@ class LLMGateway(Protocol):
     ) -> LLMResult: ...
 
 
-# ── NLI (gate3 — 'hỗ trợ pháp lý', chỉ PROMOTE/HOLD, KHÔNG veto) ─────────────
+# ── NLI (PROMOTE needs evidence; HOLD cannot support paraphrases) ──────────
 NLIVerdict = Literal["promote", "hold"]
 
 

@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 from urllib.parse import urlparse
 
 # Nguồn CHÍNH THỨC được phép (host). Mở rộng qua JurisdictionPack sau.

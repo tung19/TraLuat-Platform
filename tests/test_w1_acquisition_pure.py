@@ -1,6 +1,6 @@
 """L1 Acquisition — cổng license + dedup + provenance (pure)."""
 
-from traluat.w1.acquisition import AcquiredBlob, LicenseGate, SourceConnector, acquire
+from traluat.w1.acquisition import AcquiredBlob, LicenseGate, acquire
 
 
 class _Conn:

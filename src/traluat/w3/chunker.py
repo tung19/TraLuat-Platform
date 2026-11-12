@@ -27,6 +27,7 @@ class Chunk:
     span_text: str              # nguyên văn (neo) — == repo.citable_text(eid, as_of)
     effect_status: EffectStatus
     as_of: dt.date
+    frbr_uri: str | None = None
 
     @property
     def embed_text(self) -> str:
@@ -65,6 +66,6 @@ def build_chunks(
             continue
         chunks.append(Chunk(
             unit_eid=u.eid, lang=lang, struct_header=f"{head} · {_path(u)}",
-            span_text=text, effect_status=status, as_of=as_of,
+            span_text=text, effect_status=status, as_of=as_of, frbr_uri=doc.frbr_uri,
         ))
     return chunks

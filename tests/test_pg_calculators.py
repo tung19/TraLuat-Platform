@@ -8,6 +8,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
+from tests.reference_helpers import seed_reference_sources
 from traluat.tools.calculators import available, run
 from traluat.tools.reference import RefRow, upsert_reference
 from traluat.w2.db import make_engine
@@ -26,6 +27,7 @@ def session():
         trans.rollback(); conn.close()
         pytest.skip("reference_value chưa migrate")
     s = Session(bind=conn, future=True)
+    seed_reference_sources(s, ['nd99__dieu_3', 'nd50__dieu_1', 'luat_tncn__dieu_22', 'luat_gtgt__dieu_8', 'bllĐ2019__dieu_98', 'luat_bhxh__dieu_85', 'nq954_2020', 'luat_tncn_cu', 'nd_atiga', 'luat_bhxh__dieu_60'])
     try:
         yield s
     finally:

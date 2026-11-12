@@ -13,7 +13,7 @@ from traluat.w2 import repo
 from traluat.w2.db import make_engine
 
 D = dt.date
-from tests.test_w1_phased import PHASED  # noqa: E402
+from tests.test_w1_phased import PHASED
 
 
 @pytest.fixture()

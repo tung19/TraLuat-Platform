@@ -1,0 +1,16 @@
+W1111 07:41:13.081000 93074 .venv/lib/python3.12/site-packages/torch/distributed/elastic/multiprocessing/redirects.py:35] NOTE: Redirects are currently not supported in MacOs.
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 16900.84it/s]
+Loading weights:   0%|          | 0/202 [00:00<?, ?it/s]Loading weights: 100%|██████████| 202/202 [00:00<00:00, 11396.34it/s]
+local model qwen2.5-coder:latest at 2022-01-01: Doanh nghiệp phải nộp hồ sơ trong thời hạn 15 ngày làm việc.
+local model qwen2.5-coder:latest at 2024-01-01: Doanh nghiệp phải nộp hồ sơ trong thời hạn 30 ngày làm việc.
+.Could not reach the Hub (Cannot reach https://huggingface.co/api/models/BAAI/bge-m3: offline mode is enabled. To disable it, please unset the `HF_HUB_OFFLINE` environment variable.). Using cached commit hash for 'BAAI/bge-m3'.
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 94289.25it/s]
+....Loading weights:   0%|          | 0/202 [00:00<?, ?it/s]Loading weights: 100%|██████████| 202/202 [00:00<00:00, 10929.99it/s]
+...
+=============================== warnings summary ===============================
+tests/test_models_local_pipeline.py::test_real_local_models_answer_from_the_correct_version
+  /Users/tung/TungNT/Workplace/TraLuatPlatform/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1491: FutureWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 1 warning in 45.79s

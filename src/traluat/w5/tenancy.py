@@ -23,6 +23,8 @@ class TenantContext:
     residency_region: str = "vn"
     retention_mode: str = "standard"   # standard | zero
     tia_filed: bool = False            # đã khai Transfer Impact Assessment (Luật 91/2025 Đ20)
+    subject: str = ""                  # identity from the validated token
+    platform_operator: bool = False    # resolved from the database, never a tenant role
 
     def __post_init__(self) -> None:
         if not self.tenant_id:

@@ -15,7 +15,7 @@ from traluat.w5 import LegalService, LLMDestination, TenantContext
 
 D = dt.date
 FRBR = "trl:vn/nd/99/2020"
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 
 @pytest.fixture()
@@ -81,11 +81,11 @@ def test_client_data_local_down_denies_never_claude(session: Session):
     assert [e.phase for e in svc.audit.by_trace(r.trace_id)] == ["intent", "denied"]
 
 
-def test_public_lookup_allowed_to_claude(session: Session):
-    # I3: câu hỏi THUẦN KB (lookup, không tình tiết khách) → public → ra Claude
+def test_free_text_lookup_stays_local(session: Session):
+    # A public topic does not establish provenance for the user's free text.
     svc = _svc(session)
     r = svc.lookup("vốn pháp định tối thiểu", D(2022, 1, 1), CTX, local_available=True)
-    assert r.route.destination == LLMDestination.CLAUDE   # dữ liệu công → ra ngoài được
+    assert r.route.destination == LLMDestination.LOCAL
     assert r.answered and r.answer is not None
 
 

@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Iterator, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from .ingest import ingest_document
 
@@ -72,11 +73,14 @@ class JsonlFileSource:
 class IngestOutcome:
     loaded: list[str] = field(default_factory=list)              # frbr_uri đã nạp
     failed: list[tuple[str, str]] = field(default_factory=list)  # (doc_slug, lý do)
+    unresolved: list[dict] = field(default_factory=list)
+    indexed_chunks: int = 0
 
 
 def ingest_source(
     session, source: DocumentSource, *, since: dt.date | None = None, ocr=None,
-    anonymize_judgments: bool = True,
+    anonymize_judgments: bool = True, index: bool = False, embedder=None,
+    relations: bool = False,
 ) -> IngestOutcome:
     """Nạp cả mẻ từ nguồn → W2. Lỗi 1 văn bản không chặn mẻ (ghi vào failed).
 
@@ -86,6 +90,7 @@ def ingest_source(
     khi lưu (tên→viết tắt, CMND/CCCD/SĐT/email che). KB QPPL (Luật/NĐ) không áp."""
     from .anonymize import anonymize, is_judgment_type
     out = IngestOutcome()
+    loaded_sources = []
     for raw in source.fetch(since):
         try:
             text = raw.text
@@ -95,12 +100,31 @@ def ingest_source(
                 text = ocr.extract(raw.image_ref, raw.lang)
             if anonymize_judgments and is_judgment_type(raw.doc_type):
                 text, _ = anonymize(text)              # CN-05: che PII bản án
-            doc, _ = ingest_document(
-                session, text, raw.doc_slug, frbr_uri=raw.frbr_uri,
-                doc_type=raw.doc_type, date_effective=raw.date_effective,
-                doc_number=raw.doc_number, lang=raw.lang,
-            )
+            # A failed flush aborts a PostgreSQL transaction. A savepoint per
+            # document preserves earlier successes and permits later documents.
+            with session.begin_nested():
+                doc, _ = ingest_document(
+                    session, text, raw.doc_slug, frbr_uri=raw.frbr_uri,
+                    doc_type=raw.doc_type, date_effective=raw.date_effective,
+                    doc_number=raw.doc_number, lang=raw.lang,
+                )
+                count = 0
+                if index:
+                    from ..w3.indexer import reindex_document
+                    count = reindex_document(session, doc.frbr_uri, lang=raw.lang, embedder=embedder)
             out.loaded.append(doc.frbr_uri)
+            out.indexed_chunks += count
+            loaded_sources.append((doc.frbr_uri, text, doc.date_effective))
         except Exception as e:  # noqa: BLE001 — cô lập lỗi từng văn bản
             out.failed.append((raw.doc_slug, str(e)))
+    # Resolve after the whole batch: targets may occur after their referring source.
+    if relations:
+        from dataclasses import asdict
+
+        from .ingest import extract_and_load_relations
+        for uri, text, effective in loaded_sources:
+            with session.begin_nested():
+                _, unresolved = extract_and_load_relations(
+                    session, src_frbr_uri=uri, text=text, default_effective_date=effective)
+                out.unresolved.extend({"source": uri, **asdict(c)} for c in unresolved)
     return out

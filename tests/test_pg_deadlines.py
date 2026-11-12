@@ -9,6 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 import traluat.tools.deadlines  # noqa: F401  (đăng ký @calculator("thoi_hieu"))
+from tests.reference_helpers import seed_reference_sources
 from traluat.tools import calculators
 from traluat.tools.deadlines import compute_deadline
 from traluat.tools.reference import RefRow, upsert_reference
@@ -28,6 +29,7 @@ def session():
         trans.rollback(); conn.close()
         pytest.skip("reference_value chưa migrate")
     s = Session(bind=conn, future=True)
+    seed_reference_sources(s, ['bltts2015__dieu_273', 'blds2015__dieu_429', 'bltts_moi__dieu_X', 'luatkn__dieu_9'])
     try:
         yield s
     finally:

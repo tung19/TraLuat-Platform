@@ -15,7 +15,7 @@ import datetime as dt
 
 import sqlalchemy as sa
 from pgvector.sqlalchemy import Vector
-from sqlalchemy.dialects.postgresql import ExcludeConstraint, JSONB, TSVECTOR
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, ExcludeConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -105,6 +105,8 @@ class NormRelation(Base):
     confidence: Mapped[float | None]
     confidence_basis: Mapped[str | None]                        # ★ C2: không bịa confidence
     review_status: Mapped[str] = mapped_column(default="needs_review")  # ★ C1 gate
+    materialized_at: Mapped[dt.datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    applied_payload_hash: Mapped[str | None]
     evidence_span: Mapped[str | None]
 
     __table_args__ = (
@@ -112,6 +114,7 @@ class NormRelation(Base):
         sa.UniqueConstraint(
             "src_doc_id", "src_unit_id", "dst_doc_id", "dst_unit_id",
             "relation_type", "effective_date", name="nr_dedupe",
+            postgresql_nulls_not_distinct=True,
         ),
     )
 
@@ -139,6 +142,7 @@ class Chunk(Base):
     valid_to: Mapped[dt.date | None]
     source_version: Mapped[str] = mapped_column(default="v1")
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
+    embedding_model: Mapped[str | None]
     tsv: Mapped[str | None] = mapped_column(
         TSVECTOR, sa.Computed("to_tsvector('simple', span_text)", persisted=True))
 

@@ -8,11 +8,26 @@ chunk với [valid_from,valid_to) denormalized → push-down as_of trong SQL.
 
 from __future__ import annotations
 
+import math
+
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from ..w2.models import Chunk, Document, Unit, UnitVersion
+
+
+def embedding_identity(embedder) -> str:
+    return getattr(embedder, "model_id", None) or (
+        f"{type(embedder).__module__}.{type(embedder).__qualname__}:{embedder.dim}")
+
+
+def validate_vectors(vectors, count):
+    if len(vectors) != count or any(
+        len(v) != 1024 or not all(math.isfinite(x) for x in v) or not any(v)
+        for v in vectors
+    ):
+        raise ValueError("expected one finite, nonzero 1024-dimensional vector per input")
 
 
 def _paths(session: Session, doc_id: int) -> dict[int, str]:
@@ -40,13 +55,6 @@ def reindex_document(
     head = doc.doc_number or doc.frbr_uri
     paths = _paths(session, doc.id)
 
-    # ★ rebuild per-doc: XÓA chunk của doc trong namespace TRƯỚC → không để lại chunk
-    # của version đã bị thay thế (stale sau amendment/R5 tx-correction). L4 = ảnh của L3.
-    session.execute(
-        sa.delete(Chunk).where(
-            Chunk.namespace == namespace, Chunk.lang == lang,
-            Chunk.unit_id.in_(sa.select(Unit.id).where(Unit.document_id == doc.id))))
-
     rows = session.execute(
         sa.select(Unit.id, Unit.eid, UnitVersion.valid_from, UnitVersion.valid_to,
                   UnitVersion.text)
@@ -54,26 +62,31 @@ def reindex_document(
         .where(Unit.document_id == doc.id, UnitVersion.lang == lang,
                UnitVersion.tx_to.is_(None), UnitVersion.text.is_not(None))
     ).all()
-    if not rows:
-        session.flush()
-        return 0
-
-    embs = embedder.embed([r.text for r in rows]) if embedder is not None else [None] * len(rows)
+    embs = embedder.embed([r.text for r in rows]) if embedder is not None and rows else [None] * len(rows)
+    if embedder is not None:
+        validate_vectors(embs, len(rows))
+    # Validate model output before replacing the old index. Empty documents
+    # still remove stale chunks; transaction ownership remains with the caller.
+    session.execute(sa.delete(Chunk).where(
+        Chunk.namespace == namespace, Chunk.lang == lang,
+        Chunk.unit_id.in_(sa.select(Unit.id).where(Unit.document_id == doc.id))))
     n = 0
     for r, emb in zip(rows, embs):
         sv = r.valid_from.isoformat()           # version-stamp phân biệt bản theo thời gian
-        payload = dict(
-            unit_id=r.id, eid=r.eid, lang=lang, namespace=namespace,
-            struct_header=f"{head} · {paths.get(r.id, r.eid)}",
-            span_text=r.text, char_from=0, char_to=len(r.text),
-            valid_from=r.valid_from, valid_to=r.valid_to, source_version=sv, embedding=emb,
-        )
+        payload = {
+            "unit_id": r.id, "eid": r.eid, "lang": lang, "namespace": namespace,
+            "struct_header": f"{head} · {paths.get(r.id, r.eid)}",
+            "span_text": r.text, "char_from": 0, "char_to": len(r.text),
+            "valid_from": r.valid_from, "valid_to": r.valid_to,
+            "source_version": sv, "embedding": emb,
+            "embedding_model": embedding_identity(embedder) if embedder is not None else None,
+        }
         stmt = pg_insert(Chunk).values(**payload)
         stmt = stmt.on_conflict_do_update(
             constraint="uq_chunk_ver",
             set_={"span_text": payload["span_text"], "struct_header": payload["struct_header"],
                   "valid_to": payload["valid_to"], "char_to": payload["char_to"],
-                  "embedding": emb},
+                  "embedding": emb, "embedding_model": payload["embedding_model"]},
         )
         session.execute(stmt)
         n += 1

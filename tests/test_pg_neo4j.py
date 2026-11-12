@@ -10,13 +10,17 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 pytest.importorskip("neo4j")
-from neo4j import GraphDatabase  # noqa: E402
+from neo4j import GraphDatabase
 
-from traluat.w1 import build_ingest, load_to_w2  # noqa: E402
-from traluat.w2 import PostgresGraphStore  # noqa: E402
-from traluat.w2.db import make_engine  # noqa: E402
-from traluat.w2.graph_neo4j import (  # noqa: E402
-    Neo4jGraphStore, gds_communities, gds_pagerank, project_to_neo4j)
+from traluat.w1 import build_ingest, load_to_w2
+from traluat.w2 import PostgresGraphStore
+from traluat.w2.db import make_engine
+from traluat.w2.graph_neo4j import (
+    Neo4jGraphStore,
+    gds_communities,
+    gds_pagerank,
+    project_to_neo4j,
+)
 
 
 def _has_gds(driver) -> bool:
@@ -26,11 +30,11 @@ def _has_gds(driver) -> bool:
         return True
     except Exception:  # noqa: BLE001
         return False
-from traluat.w2.models import NormRelation, Unit  # noqa: E402
+from traluat.w2.models import NormRelation, Unit
 
 D = dt.date
 FRBR = "trl:vn/nd/99/2020"
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 _BOLT = "bolt://localhost:7687"
 _AUTH = ("neo4j", "traluat-neo4j-pw")
@@ -92,6 +96,17 @@ def test_neo4j_multihop_matches_cte(session: Session, driver):
     # edge 2025 → tại 2025 cạnh dieu_5→dieu_1 bật (bitemporal-aware, cả 2 engine)
     assert ne.multihop("nd99__dieu_5", ["cites"], as_of=D(2025, 6, 1)) == \
            pg.multihop("nd99__dieu_5", ["cites"], as_of=D(2025, 6, 1))
+
+
+def test_rejected_and_pending_edges_never_enter_reasoning_graph(session: Session, driver):
+    for dst, status in [("nd99__dieu_5", "rejected"), ("nd99__dieu_3", "needs_review")]:
+        _edge(session, "nd99__dieu_1", dst, "cites")
+        row = session.scalars(sa.select(NormRelation).where(
+            NormRelation.dst_unit_id == session.scalar(sa.select(Unit.id).where(Unit.eid == dst)))).one()
+        row.review_status = status
+    session.flush()
+    project_to_neo4j(session, driver)
+    assert Neo4jGraphStore(driver).multihop("nd99__dieu_1", ["cites"], as_of=D(2022, 1, 1)) == []
 
 
 def test_auto_sync_on_materialize(session: Session, driver):

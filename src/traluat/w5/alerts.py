@@ -10,9 +10,10 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from ..w2.models import Document
+from ..w2.models import Document, NormRelation
 from .models import Alert, AlertSubscription
 
 _CHANGE = {"repeals": "repealed", "replaces": "replaced", "amends": "amended"}
@@ -67,6 +68,28 @@ def fan_out(session: Session, rel, *, deliverer: Deliverer | None = None) -> lis
         out.append(a)
     session.flush()
     return out
+
+
+def sync_inbox(session: Session) -> None:
+    """Replay committed law changes for the current RLS tenant, once per relation.
+
+    Subscription and alert access stay under the reader's RLS identity. No global
+    tenant writer or external message delivery is needed. Reads repair a crash gap.
+    """
+    rows = session.execute(sa.select(
+        AlertSubscription.tenant_id, Document.frbr_uri, NormRelation.id,
+        NormRelation.relation_type,
+    ).join(Document, Document.frbr_uri == AlertSubscription.frbr_uri).join(
+        NormRelation, NormRelation.dst_doc_id == Document.id).where(
+        AlertSubscription.channel == "record", NormRelation.review_status == "approved",
+        NormRelation.materialized_at >= AlertSubscription.created_at,
+        NormRelation.relation_type.in_(list(_CHANGE)),
+    ).distinct()).all()
+    for tenant, uri, rid, kind in rows:
+        session.execute(insert(Alert).values(
+            tenant_id=tenant, frbr_uri=uri, change=_CHANGE[kind], source_relation_id=rid,
+            delivered=False,
+        ).on_conflict_do_nothing(index_elements=["tenant_id", "source_relation_id"]))
 
 
 def enable_alert_sync(deliverer: Deliverer | None = None) -> None:

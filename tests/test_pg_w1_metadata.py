@@ -14,7 +14,7 @@ from traluat.w2.db import make_engine
 from traluat.w2.models import Document
 
 D = dt.date
-from tests.test_w1_metadata import FULL_ND  # noqa: E402
+from tests.test_w1_metadata import FULL_ND
 
 
 @pytest.fixture()
@@ -35,7 +35,7 @@ def session():
 
 
 def test_ingest_document_no_manual_args(session: Session):
-    doc, meta = ingest_document(session, FULL_ND, "nd99")
+    doc, _meta = ingest_document(session, FULL_ND, "nd99")
 
     assert doc.frbr_uri == "trl:vn/nd/99/2020"       # suy từ metadata
     assert doc.doc_type == "nghi_dinh"

@@ -11,12 +11,12 @@ from sqlalchemy.orm import Session
 from traluat.w1 import build_ingest, load_to_w2
 from traluat.w2.db import make_engine
 from traluat.w2.models import Document, NormRelation
-from traluat.w3 import Answer, Citation, EchoLLMGateway, HoldNLI, answer_question
+from traluat.w3 import Citation, EchoLLMGateway, HoldNLI, answer_question
 from traluat.w3.gateway import BaseLLMGateway
 
 D = dt.date
 FRBR = "trl:vn/nd/99/2020"
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 
 @pytest.fixture()

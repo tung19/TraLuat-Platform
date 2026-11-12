@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+from urllib.parse import quote
 
 import sqlalchemy as sa
 
@@ -29,9 +30,14 @@ def derive_frbr_uri(meta: DocMeta) -> str | None:
         return None
     seg = _TYPE_SEG.get(meta.doc_type)
     parts = meta.doc_number.split("/")
-    if seg is None or len(parts) < 2:
+    if seg is None or len(parts) != 3 or not all(parts):
         return None
-    return f"trl:vn/{seg}/{parts[0]}/{parts[1]}"
+    base = f"trl:vn/{seg}/{parts[0]}/{parts[1]}"
+    # Circulars/decisions/resolutions from different issuers share numbers and
+    # years. Retain the complete suffix, preserving legacy national-law/ND URIs.
+    if meta.doc_type not in {"nghi_dinh", "luat"}:
+        base += "/" + quote(parts[2].casefold(), safe="-")
+    return base
 
 
 def _resolve_authority(session, name: str | None) -> int | None:
@@ -134,16 +140,25 @@ def ingest_document(
     if missing:
         raise ValueError(f"metadata thiếu, không ingest: {', '.join(missing)} (doc_slug={doc_slug})")
 
-    # D6: idempotent — cùng frbr_uri đã có → bỏ qua (không raise, không nhân đôi).
+    source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    # Replay is safe only when identity AND content agree. A corrected source is
+    # a knowledge-ops review/versioning operation, never a silently ignored blob.
+    session.execute(sa.text("SELECT pg_advisory_xact_lock(hashtextextended(:uri, 0))"),
+                    {"uri": frbr_uri})
     existing = session.scalar(sa.select(Document).where(Document.frbr_uri == frbr_uri))
     if existing is not None:
+        if (existing.doc_number != doc_number or existing.doc_type != doc_type
+                or existing.source_hash != source_hash):
+            raise ValueError(f"FRBR đã tồn tại với nguồn/định danh khác, cần duyệt: {frbr_uri}")
         return existing, meta
 
-    source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    units = build_ingest(text, doc_slug)
+    if not units:
+        raise ValueError(f"không tìm thấy cấu trúc pháp lý để nạp: {doc_slug}")
     authority_id = _resolve_authority(session, meta.authority_name)
     doc = load_to_w2(
         session, frbr_uri=frbr_uri, doc_type=doc_type, date_effective=date_effective,
-        units=build_ingest(text, doc_slug), doc_number=doc_number, source_hash=source_hash,
+        units=units, doc_number=doc_number, source_hash=source_hash,
         date_issued=meta.date_issued, authority_id=authority_id,
         effective_overrides=extract_effective_overrides(text, doc_slug), lang=lang,
     )
@@ -175,6 +190,8 @@ def load_relations_to_w2(
     src = session.scalar(sa.select(Document).where(Document.frbr_uri == src_frbr_uri))
     if src is None:
         raise ValueError(f"src_frbr_uri không có trong kho: {src_frbr_uri}")
+    session.execute(sa.text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+                    {"key": f"norm-relations:{src.id}"})
 
     created: list[NormRelation] = []
     unresolved: list[RelationCandidate] = []
@@ -187,11 +204,25 @@ def load_relations_to_w2(
             unresolved.append(c)  # VB đích chưa ingest — chờ, không bịa
             continue
         dst_unit_id = _resolve_dst_unit(session, dst.id, c.dst_dieu) if c.dst_dieu else None
+        if c.dst_dieu is not None and dst_unit_id is None:
+            unresolved.append(c)
+            continue
         eff = c.effective_date or default_effective_date
         key = (src.id, dst.id, dst_unit_id, c.relation_type, eff)
         if key in seen:  # chống nhân đôi trong cùng mẻ (DB còn nr_dedupe)
             continue
         seen.add(key)
+        existing = session.scalar(sa.select(NormRelation).where(
+            NormRelation.src_doc_id == src.id,
+            NormRelation.src_unit_id.is_(None),
+            NormRelation.dst_doc_id == dst.id,
+            NormRelation.dst_unit_id.is_not_distinct_from(dst_unit_id),
+            NormRelation.relation_type == c.relation_type,
+            NormRelation.effective_date.is_not_distinct_from(eff),
+        ))
+        if existing is not None:
+            # Preserve an expert's approved/rejected decision on CDC replay.
+            continue
         rel = NormRelation(
             relation_type=c.relation_type, effective_date=eff,
             src_doc_id=src.id, src_unit_id=None,

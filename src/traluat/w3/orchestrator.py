@@ -37,9 +37,14 @@ class Answer:
     caveat: bool = False                  # R3: điều trích có quan hệ huỷ đang chờ duyệt
     ai_label: bool = True
     gates: list[GateResult] = field(default_factory=list)
+    review_context: list[dict[str, str]] = field(default_factory=list)
+    needs_human: bool = False
+    sources: list[dict] = field(default_factory=list)
+    model: str | None = None
+    is_demo: bool = False
 
     @classmethod
-    def abstained(cls, reason: str, as_of: dt.date, gates=None) -> "Answer":
+    def abstained(cls, reason: str, as_of: dt.date, gates=None) -> Answer:
         return cls(abstain=True, reason=reason, as_of=as_of, gates=gates or [])
 
 
@@ -57,24 +62,40 @@ def answer_question(
     extra_anchors: list[dt.date] | None = None,
     plan_caveat: bool = False,
     node: str = "answer",            # "answer" | "summary" (FR-14) → model-tier router
+    retriever=None,
 ) -> Answer:
     # B1: pin MỘT known_as_of (tx-time) cho cả request → retrieve và verify thấy
     # cùng một snapshot, không lệch nếu có tx-version commit giữa chừng.
-    known = dt.datetime.now(dt.timezone.utc)
+    known = repo._db_now(session)
 
     # 1) retrieve tại primary + các mốc phụ (§1b đa-mốc), hợp nhất theo eid (giữ
     #    bản primary trước → text trích dẫn theo mốc chính). rỗng → abstain.
     anchors = [as_of, *(extra_anchors or [])]
-    seen: dict[str, object] = {}
+    seen: dict[tuple[str, dt.date], object] = {}
     cands = []
     for a in anchors:
-        for rc in retrieve(session, query, a, lang=lang,
+        for rc in (retriever or retrieve)(session, query, a, lang=lang,
                            scope_frbr_uris=scope_frbr_uris, top_k=top_k, known_as_of=known):
-            if rc.unit_eid not in seen:
-                seen[rc.unit_eid] = rc
+            key = (rc.unit_eid, rc.chunk.as_of)
+            if key not in seen:
+                seen[key] = rc
                 cands.append(rc)
     if not cands:
         return Answer.abstained("insufficient_retrieval", as_of)
+
+    # Preserve every retrieved version for human comparison. Fetching a newer
+    # criminal provision does not establish that it applies retroactively or is
+    # more favourable; never silently choose a legal conclusion at one anchor.
+    if len(set(anchors)) > 1 or plan_caveat:
+        reason = "multiple_anchors_require_review" if len(set(anchors)) > 1 else "uncertain_anchor_requires_review"
+        answer = Answer.abstained(reason, as_of)
+        answer.needs_human = True
+        answer.caveat = True
+        answer.review_context = [
+            {"unit_eid": rc.unit_eid, "anchor": rc.chunk.as_of.isoformat(),
+             "text": rc.chunk.span_text, "effect_status": rc.effect_status.value}
+            for rc in cands]
+        return answer
 
     # 2) generate (LLM CHỈ từ ngữ cảnh; guard tenant + nhãn AI trong gateway)
     draft = gateway.generate(query, cands, as_of=as_of, node=node,
@@ -85,7 +106,9 @@ def answer_question(
     # ★ bất biến §2: LLM CHỈ được trích từ đoạn ĐÃ truy xuất — loại trích dẫn
     # ngoài ngữ cảnh (chống viện dẫn từ kiến thức tham số). Rỗng sau lọc → abstain.
     allowed = {rc.unit_eid for rc in cands}
-    cited = [c.unit_eid for c in draft.citations if c.unit_eid in allowed]
+    cited = [c for c in draft.citations if c.unit_eid in allowed]
+    if len(cited) != len(draft.citations) and cited:
+        return Answer.abstained("citation_outside_context", as_of)
 
     # 3) verify từng trích dẫn (gate1/2/3b tất định + gate3 NLI tuỳ chọn) — cùng known
     g = ground(session, draft.text, as_of, cited, lang, nli, known_as_of=known)
@@ -108,6 +131,11 @@ def answer_question(
         effect_status={gt.unit_eid: gt.status for gt in passed},
         as_of=as_of, confidence=conf, caveat=caveat,
         ai_label=draft.ai_label, gates=g.gates,
+        model=draft.model, is_demo=draft.model == "echo-stub",
+        sources=[{"unit_eid": rc.unit_eid, "frbr_uri": rc.chunk.frbr_uri,
+                  "title": rc.chunk.struct_header, "text": rc.chunk.span_text,
+                  "as_of": as_of.isoformat(), "effect_status": rc.effect_status.value}
+                 for rc in cands if rc.unit_eid in g.supported_eids],
     )
 
 
@@ -124,6 +152,7 @@ def answer_with_resolution(
     lang: str = "vi",
     scope_frbr_uris: list[str] | None = None,
     top_k: int = 8,
+    retriever=None,
 ) -> tuple[Answer, AsOfPlan]:
     """Giải mốc (event-date-first + lex-mitior) rồi trả lời. Verify tại mốc CHÍNH
     (ngày sự kiện); mốc phụ (luật-nay cho hình sự) chỉ WIDEN retrieval để tầng sau
@@ -133,6 +162,6 @@ def answer_with_resolution(
     ans = answer_question(
         session, query, as_of=plan.primary, gateway=gateway, nli=nli,
         tenant_id=tenant_id, lang=lang, scope_frbr_uris=scope_frbr_uris,
-        top_k=top_k, extra_anchors=extras, plan_caveat=plan.needs_human,
+        top_k=top_k, extra_anchors=extras, plan_caveat=plan.needs_human, retriever=retriever,
     )
     return ans, plan

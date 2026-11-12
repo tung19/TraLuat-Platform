@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Validate meta.json của đội data theo schemas/meta.schema.json.
 
 Dùng:
@@ -66,7 +64,7 @@ def load_schema():
 def validate_file(validator, path: Path):
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
+    except (OSError, UnicodeError, json.JSONDecodeError) as e:
         return [f"JSON không parse được: {e}"]
     errs = sorted(validator.iter_errors(data), key=lambda e: list(e.path))
     out = []

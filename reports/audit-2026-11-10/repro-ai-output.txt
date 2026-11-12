@@ -1,0 +1,7 @@
+semantic_grounding {'abstain': False, 'confidence': 1.0, 'nli': 'hold', 'text': 'Doanh nghiệp được kinh doanh ngành bị cấm. Không cần xin phép bất kỳ cơ quan nào.'}
+decimal_grounding {'source_facts': ['5 %'], 'claim_facts': ['5 %'], 'abstain': False}
+omission_gate {'article_recall': 1.0, 'omission_recall': 0.5, 'gate': (True, [])}
+language_cache {'first': 'vi', 'second': 'vi', 'same_object': True}
+checkpoint_changed_facts {'first_judge_calls': 1, 'second_judge_calls': 0, 'second_verified': ['law__dieu_1'], 'abstain': False}
+future_precedent {'as_of': '2020-01-01', 'precedent_effective_from': '2025-01-01', 'verified_precedents': ['FUTURE-AL']}
+lex_mitior_context {'lenient_fetch': True, 'context': [('law__dieu_1', 'Hình phạt là 5 năm.', '2020-01-01')], 'answer': 'Hình phạt là 5 năm.'}

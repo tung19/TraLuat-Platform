@@ -16,7 +16,7 @@ from traluat.w4 import CaseInput, ReasoningEngine, add_precedent
 
 D = dt.date
 FRBR = "trl:vn/nd/99/2020"
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 
 @pytest.fixture()
@@ -43,8 +43,10 @@ def session():
 
 def test_precedent_matched_and_pruned(session: Session):
     repo.repeal(session, "nd99__dieu_5", D(2023, 6, 1))        # Điều 5 hết hiệu lực 2023
-    add_precedent(session, "AL01", ["nd99__dieu_3__khoan_2"], situation="vốn")   # tựa điều SỐNG
-    add_precedent(session, "AL03", ["nd99__dieu_5"], situation="thẩm quyền")     # tựa điều CHẾT
+    add_precedent(session, "AL01", ["nd99__dieu_3__khoan_2"], situation="vốn",
+                  effective_from=D(2021, 1, 1))   # tựa điều SỐNG
+    add_precedent(session, "AL03", ["nd99__dieu_5"], situation="thẩm quyền",
+                  effective_from=D(2021, 1, 1))   # tựa điều CHẾT
 
     eng = ReasoningEngine(session, gateway=EchoLLMGateway())
     adj = eng.analyze(
@@ -61,14 +63,25 @@ def test_binding_precedents_effectivity(session: Session):
     from traluat.w4.precedent_store import add_precedent, binding_precedents
     add_precedent(session, "AL-10/2020", ["nd99__dieu_3"],
                   effective_from=D(2020, 6, 1))
-    add_precedent(session, "AL-null", ["nd99__dieu_3"])      # NULL → luôn áp
+    add_precedent(session, "AL-null", ["nd99__dieu_3"])      # unknown date cannot establish binding
 
     before = {p.precedent_id for p in binding_precedents(session, ["nd99__dieu_3"], D(2020, 1, 1))}
     after = {p.precedent_id for p in binding_precedents(session, ["nd99__dieu_3"], D(2021, 1, 1))}
-    assert "AL-10/2020" not in before and "AL-null" in before      # chưa hiệu lực
-    assert "AL-10/2020" in after and "AL-null" in after            # đã ràng buộc
+    assert "AL-10/2020" not in before and "AL-null" not in before
+    assert "AL-10/2020" in after and "AL-null" not in after
     # không tựa eid trong tình huống → không áp
     assert binding_precedents(session, ["nd99__dieu_1"], D(2021, 1, 1)) == []
+
+
+def test_reasoner_cannot_verify_future_or_undated_precedent(session: Session):
+    add_precedent(session, "FUTURE", ["nd99__dieu_3__khoan_2"],
+                  effective_from=D(2025, 1, 1))
+    add_precedent(session, "UNDATED", ["nd99__dieu_3__khoan_2"])
+    eng = ReasoningEngine(session, gateway=EchoLLMGateway())
+    before = eng.analyze(CaseInput("vốn pháp định tối thiểu"), D(2022, 1, 1))
+    after = eng.analyze(CaseInput("vốn pháp định tối thiểu"), D(2026, 1, 1))
+    assert before.verified_precedents == []
+    assert {p.precedent_id for p in after.verified_precedents} == {"FUTURE"}
 
 
 def test_judgment_flags_missing_binding_precedent(session: Session):

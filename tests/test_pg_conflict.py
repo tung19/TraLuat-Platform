@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from traluat.w2 import repo
 from traluat.w2.db import make_engine
-from traluat.w2.models import Document, Unit, UnitVersion
+from traluat.w2.models import Authority, Document, Unit, UnitVersion
 
 D = dt.date
 AS_OF = D(2022, 1, 1)
@@ -34,12 +34,15 @@ def session():
 
 
 _n = 0
+_DEFAULT_VALID_FROM = D(2021, 1, 1)
 
 
-def _unit(s, doc_type, eid, *, date_effective, valid_from=D(2021, 1, 1), valid_to=None, text="x"):
+def _unit(s, doc_type, eid, *, date_effective, valid_from=_DEFAULT_VALID_FROM, valid_to=None, text="x",
+          date_issued=None, authority_id=None):
     global _n
     _n += 1
-    d = Document(frbr_uri=f"trl:vn/{eid}/{_n}", doc_type=doc_type, date_effective=date_effective)
+    d = Document(frbr_uri=f"trl:vn/{eid}/{_n}", doc_type=doc_type, date_effective=date_effective,
+                 date_issued=date_issued, authority_id=authority_id)
     s.add(d); s.flush()
     s.add(Unit(document_id=d.id, unit_type="dieu", ordinal=1, label="Điều 1", eid=eid))
     s.flush()
@@ -66,10 +69,24 @@ def test_effectivity_gate_expired_cannot_win(session):
 
 
 def test_lex_posterior(session):
-    _unit(session, "nghi_dinh", "nd_2020", date_effective=D(2020, 1, 1))
-    _unit(session, "nghi_dinh", "nd_2021", date_effective=D(2021, 6, 1))
+    authority = Authority(name="Synthetic test issuer")
+    session.add(authority); session.flush()
+    _unit(session, "nghi_dinh", "nd_2020", date_effective=D(2021, 6, 1),
+          date_issued=D(2020, 1, 1), authority_id=authority.id)
+    _unit(session, "nghi_dinh", "nd_2021", date_effective=D(2020, 1, 1),
+          date_issued=D(2021, 1, 1), authority_id=authority.id)
     r = repo.resolve_conflict(session, ["nd_2020", "nd_2021"], AS_OF)
     assert r.rule == "lex_posterior" and r.winner_eid == "nd_2021"
+
+
+def test_same_rank_does_not_assume_same_issuer(session):
+    authorities = [Authority(name=f"Synthetic issuer {n}") for n in (1, 2)]
+    session.add_all(authorities); session.flush()
+    for n, authority in enumerate(authorities):
+        _unit(session, "thong_tu", f"tt_issuer_{n}", date_effective=D(2020 + n, 1, 1),
+              date_issued=D(2020 + n, 1, 1), authority_id=authority.id)
+    result = repo.resolve_conflict(session, ["tt_issuer_0", "tt_issuer_1"], AS_OF)
+    assert result.unresolved and result.winner_eid is None
 
 
 def test_abstain_ambiguous_rank(session):

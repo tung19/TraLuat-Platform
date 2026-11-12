@@ -2976,12 +2976,13 @@ wheels = [
 [[package]]
 name = "traluat"
 version = "0.0.1"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "celery" },
     { name = "cryptography" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "pgvector" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pyjwt" },
@@ -3014,7 +3015,6 @@ obs = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -3026,6 +3026,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=42" },
     { name = "fastapi", specifier = ">=0.162.2" },
     { name = "geoalchemy2", marker = "extra == 'geo'", specifier = ">=0.15" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "neo4j", marker = "extra == 'graph'", specifier = ">=5" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'obs'", specifier = ">=1.27" },
     { name = "opentelemetry-sdk", marker = "extra == 'obs'", specifier = ">=1.27" },
@@ -3048,7 +3049,6 @@ provides-extras = ["models", "graph", "obs", "geo"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.17.4" },
 ]

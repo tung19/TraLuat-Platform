@@ -33,7 +33,9 @@ def _db_now(s: Session) -> dt.datetime:
     """Transaction-time 'hiện tại' theo ĐỒNG HỒ DB (cùng nguồn với tx_from=now()).
     KHÔNG dùng datetime.now() của host: lệch đồng-hồ host↔DB (vd DB trong container
     chạy nhanh hơn) khiến `tx_from > known` → dòng vừa ghi bị ẩn (bitemporal sai)."""
-    return s.scalar(sa.select(sa.func.now()))
+    # clock_timestamp advances within a transaction, unlike now(). A request
+    # that waited on a writer must not backdate its new belief before that row.
+    return s.scalar(sa.select(sa.func.clock_timestamp()))
 
 
 def reconstruct_as_of(
@@ -88,21 +90,24 @@ def document_as_of(
     for kids in children.values():
         kids.sort(key=lambda u: u.ordinal)
 
-    lines: list[str] = []
-
-    def walk(parent_id: int | None, depth: int) -> None:
+    def walk(parent_id: int | None, depth: int) -> list[str]:
+        lines: list[str] = []
         for u in children.get(parent_id, []):
+            descendant_lines = walk(u.id, depth + 1)
             if u.id in has_version:
                 txt = reconstruct_as_of(s, u.eid, as_of, lang, known_as_of)
                 if txt is not None:                       # in-force → in nội dung
                     lines.append(f"{'  ' * depth}{u.label}. {txt}")
-                # tombstone/not-yet → bỏ dòng của chính nó (vẫn duyệt con)
-            elif u.unit_type in _STRUCTURAL:              # kết cấu → in tiêu đề
+                elif u.unit_type in _STRUCTURAL and descendant_lines:
+                    # A future repeal tombstone does not erase a structural
+                    # heading from earlier reconstructions of its children.
+                    lines.append(f"{'  ' * depth}{u.label}")
+            elif u.unit_type in _STRUCTURAL and descendant_lines:
                 lines.append(f"{'  ' * depth}{u.label}")
-            walk(u.id, depth + 1)
+            lines.extend(descendant_lines)
+        return lines
 
-    walk(None, 0)
-    return "\n".join(lines)
+    return "\n".join(walk(None, 0))
 
 
 def apply_amendment(
@@ -116,6 +121,9 @@ def apply_amendment(
     GiST EXCLUDE gác overlap; same-date fold theo order_key.
     """
     uid = _unit_id(s, eid)
+    # Lock the identity, not only existing version rows: even an empty/gapped
+    # timeline must serialize concurrent writers before testing idempotency.
+    s.execute(sa.select(Unit.id).where(Unit.id == uid).with_for_update())
 
     # idempotent
     if source_relation_id:
@@ -124,8 +132,9 @@ def apply_amendment(
             .select_from(UnitVersion)
             .where(
                 UnitVersion.source_relation_id == source_relation_id,
+                UnitVersion.unit_id == uid,
+                UnitVersion.lang == lang,
                 UnitVersion.valid_from == effective_date,
-                UnitVersion.tx_to.is_(None),
             )
         )
         if exists:
@@ -146,20 +155,28 @@ def apply_amendment(
     if len(covering) > 1:
         raise BitemporalCorruption(f"{eid}@{effective_date}: {len(covering)} bản phủ")
 
+    now = _db_now(s)
     if covering:
         v = covering[0]
-        if v.valid_from == effective_date:  # same-date fold
-            if order_key >= v.order_key:
-                v.text, v.status, v.order_key = new_text, status, order_key
-                v.source_relation_id = source_relation_id
-                v.applies_from, v.transitional = applies_from, transitional
-            s.flush()
+        if v.valid_from == effective_date and order_key < v.order_key:
             return
-        new_to = v.valid_to            # ★ interval-split: tail mở hoặc giữa chuỗi
-        v.valid_to = effective_date
-        s.flush()                      # đóng trước, tránh EXCLUDE tự-đụng trong 1 flush
+        new_to = v.valid_to
+        # Transaction history is append-only: retire the old belief, then add
+        # the corrected left segment and new segment at one database timestamp.
+        v.tx_to = now
+        s.flush()
+        if v.valid_from < effective_date:
+            s.add(UnitVersion(
+                unit_id=uid, lang=lang, valid_from=v.valid_from, valid_to=effective_date,
+                applies_from=v.applies_from, text=v.text, status=v.status,
+                transitional=v.transitional, source_relation_id=v.source_relation_id,
+                order_key=v.order_key, tx_from=now,
+            ))
     else:
-        new_to = None
+        new_to = s.scalar(sa.select(sa.func.min(UnitVersion.valid_from)).where(
+            UnitVersion.unit_id == uid, UnitVersion.lang == lang,
+            UnitVersion.tx_to.is_(None), UnitVersion.valid_from > effective_date,
+        ))
 
     s.add(
         UnitVersion(
@@ -167,6 +184,7 @@ def apply_amendment(
             applies_from=applies_from, text=new_text, status=status,
             transitional=transitional, source_relation_id=source_relation_id,
             order_key=order_key,
+            tx_from=now,
         )
     )
     s.flush()  # EXCLUDE kiểm tại đây → raise nếu overlap
@@ -207,15 +225,27 @@ def materialize(s: Session, rel: NormRelation, *, theta: float = 0.9) -> bool:
     Trả True nếu đã materialize, False nếu bị chặn (chờ duyệt). Sau khi áp → gọi
     post-materialize hooks (vd sync projection Neo4j) với cạnh vừa thay đổi.
     """
+    if rel.id is not None:
+        # Replays/concurrent approvals must not emit hooks twice.
+        s.flush()
+        s.refresh(rel, with_for_update=True)
+    if rel.review_status == "rejected":
+        return False
     approved = rel.review_status == "approved"
     auto_ok = rel.relation_type in AUTO_SAFE_TYPES and (rel.confidence or 0.0) >= theta
     if not (approved or auto_ok):
         return False  # chặn — chờ hàng đợi duyệt (không corrupt kho)
 
+    if rel.relation_type not in AUTO_SAFE_TYPES | {"repeals", "replaces"}:
+        # An amendment needs a reviewed replacement-text payload. A boolean
+        # approval alone cannot synthesize that text or count as materialization.
+        return False
+    if rel.materialized_at is not None:
+        return True
     if rel.relation_type in {"repeals", "replaces"}:
         _materialize_repeal(s, rel)
-    # amends cần TEXT mới (W1 resolve từ văn bản sửa đổi) — ngoài phạm vi slice-3.
-    # cites/guides/hierarchy/conflicts: quan hệ đồ thị, không chạm unit_version.
+    rel.materialized_at = _db_now(s)
+    s.flush()
     for hook in _POST_MATERIALIZE_HOOKS:        # sync projection (nếu đăng ký)
         hook(s, rel)
     return True
@@ -226,12 +256,31 @@ def _materialize_repeal(s: Session, rel: NormRelation) -> None:
     if eff is None:
         raise BitemporalCorruption(f"relation {rel.id}: repeals thiếu effective_date")
     if rel.dst_unit_id is not None:
-        repeal(s, _eid(s, rel.dst_unit_id), eff, source_relation_id=f"rel:{rel.id}")
+        units = list(s.scalars(sa.select(Unit).where(Unit.document_id == rel.dst_doc_id)))
+        children: dict[int | None, list[Unit]] = defaultdict(list)
+        for unit in units:
+            children[unit.parent_id].append(unit)
+        by_id = {u.id: u for u in units}
+        if rel.dst_unit_id not in by_id:
+            raise BitemporalCorruption("relation đích unit/document không khớp")
+        pending = [rel.dst_unit_id]
+        target_units = []
+        visited = set()
+        while pending:
+            uid = pending.pop()
+            if uid in visited:
+                raise BitemporalCorruption("chu trình cây unit")
+            visited.add(uid)
+            target_units.append(by_id[uid])
+            pending.extend(child.id for child in children[uid])
     else:
-        # ★ G3-fix: repeal CẢ VĂN BẢN → tombstone mọi unit của dst_doc
-        eids = s.scalars(sa.select(Unit.eid).where(Unit.document_id == rel.dst_doc_id)).all()
-        for e in eids:
-            repeal(s, e, eff, source_relation_id=f"rel:{rel.id}:{e}")
+        target_units = list(s.scalars(sa.select(Unit).where(Unit.document_id == rel.dst_doc_id)))
+    for unit in sorted(target_units, key=lambda u: u.id):
+        langs = list(s.scalars(sa.select(UnitVersion.lang).where(
+            UnitVersion.unit_id == unit.id).distinct())) or ["vi"]
+        for lang in langs:
+            repeal(s, unit.eid, eff, source_relation_id=f"rel:{rel.id}",
+                   lang=lang, order_key=rel.order_key)
 
 
 # ── effect_status qua DB (B3-fix: enum, không bool) ─────────────────────────────
@@ -323,7 +372,8 @@ def pending_destructive_relation(s: Session, eid: str) -> bool:
     n = s.scalar(
         sa.select(sa.func.count()).select_from(NormRelation).where(
             NormRelation.relation_type.in_(_DESTRUCTIVE),
-            NormRelation.review_status == "needs_review",
+            NormRelation.review_status.in_(("needs_review", "approved")),
+            NormRelation.materialized_at.is_(None),
             sa.or_(NormRelation.dst_unit_id == uid, NormRelation.dst_doc_id == doc_id),
         )
     )
@@ -340,10 +390,14 @@ def correct_valid_from(
     Đóng bản sai ở trục transaction-time (tx_to=now, giữ để audit) + chèn bản ĐÚNG
     (tx_from=now). → truy vấn với known_as_of trong quá khứ vẫn trả điều hệ-thống-từng-tin.
     """
-    now = now or _db_now(s)          # đồng hồ DB (khớp tx_from server-default + reads)
-    v = s.get(UnitVersion, version_id)
+    s.execute(sa.select(Unit.id).join(UnitVersion).where(
+        UnitVersion.id == version_id).with_for_update(of=Unit))
+    v = s.get(UnitVersion, version_id, populate_existing=True, with_for_update=True)
     if v is None or v.tx_to is not None:
         raise BitemporalCorruption(f"version {version_id} không tồn tại / không còn current")
+    now = now or _db_now(s)
+    if now < v.tx_from:
+        raise BitemporalCorruption("transaction-time không được đi lùi")
     v.tx_to = now  # đóng tin cũ (vẫn giữ dòng)
     s.flush()
     s.add(
@@ -384,7 +438,8 @@ def resolve_conflict(
     items = []
     for eid in eids:
         row = s.execute(
-            sa.select(Document.doc_type, Document.date_effective)
+            sa.select(Document.doc_type, Document.date_effective, Document.date_issued,
+                      Document.authority_id)
             .join(Unit, Unit.document_id == Document.id).where(Unit.eid == eid)
         ).first()
         if row is None:
@@ -392,6 +447,7 @@ def resolve_conflict(
         st = effect_status(s, eid, as_of)
         items.append({
             "eid": eid, "doc_type": row.doc_type, "date_effective": row.date_effective,
+            "date_issued": row.date_issued, "authority_id": row.authority_id,
             "status": st, "rank": rank_fn(row.doc_type, as_of),
         })
 
@@ -418,11 +474,13 @@ def resolve_conflict(
                               f"Hiệu lforce cao nhất (rank {max_rank}) thắng.")
 
     # ③ lex posterior (cùng rank — scaffold xấp xỉ 'cùng cơ quan'; mới hơn thắng)
-    dates = [it["date_effective"] for it in top]
-    if all(d is not None for d in dates) and len(set(dates)) == len(dates):
-        w = max(top, key=lambda it: it["date_effective"])
+    dates = [it["date_issued"] for it in top]
+    authorities = {it["authority_id"] for it in top}
+    if (len(authorities) == 1 and None not in authorities
+            and all(d is not None for d in dates) and len(set(dates)) == len(dates)):
+        w = max(top, key=lambda it: it["date_issued"])
         return ConflictResult(w["eid"], losers_except(w["eid"]), "lex_posterior",
-                              "Cùng rank → ban hành/hiệu lực sau thắng.")
+                              "Cùng cơ quan và rank → ban hành sau thắng.")
 
     # ④ hoà / posterior⟂specialis → ABSTAIN (principle #6)
     return ConflictResult(None, all_losers, "abstain:tie",
@@ -438,6 +496,8 @@ def neighborhood(
     """Trả {center, nodes, edges} — đồ thị lân cận (cả 2 chiều) tới max_hops, lọc
     hiệu lực cạnh theo as_of. Nodes = unit (eid/label/type); edges = quan hệ có hướng."""
     as_of = as_of or dt.date.max
+    if not 0 <= max_hops <= 3:
+        raise ValueError("max_hops phải trong khoảng 0..3")
     frontier = {_unit_id(s, eid)}
     seen_ids = set(frontier)
     rels: dict[int, NormRelation] = {}
@@ -445,6 +505,7 @@ def neighborhood(
         if not frontier:
             break
         q = sa.select(NormRelation).where(
+            NormRelation.review_status == "approved",
             sa.or_(NormRelation.src_unit_id.in_(frontier),
                    NormRelation.dst_unit_id.in_(frontier)),
             sa.or_(NormRelation.effective_date.is_(None),
@@ -481,6 +542,8 @@ def multihop(
     quan hệ theo as_of. AGE để sau — FK+CTE trước (stack-db: hoãn AGE).
     """
     start_id = _unit_id(s, start_eid)
+    if not 0 <= max_hops <= 3:
+        raise ValueError("max_hops phải trong khoảng 0..3")
     as_of = as_of or dt.date.max
     sql = sa.text("""
         WITH RECURSIVE reach(unit_id, depth, path) AS (
@@ -490,6 +553,7 @@ def multihop(
             FROM reach r
             JOIN norm_relation nr ON nr.src_unit_id = r.unit_id
             WHERE nr.relation_type = ANY(CAST(:types AS text[]))
+              AND nr.review_status = 'approved'
               AND nr.dst_unit_id IS NOT NULL
               AND (nr.effective_date IS NULL OR nr.effective_date <= :as_of)
               AND r.depth < :max_hops

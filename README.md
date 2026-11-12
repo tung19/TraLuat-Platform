@@ -2,7 +2,9 @@
 
 > **Engine tạo ra sản phẩm pháp lý đã hoàn thành** (hợp đồng đã rà, báo cáo tuân thủ, thẩm định bản án), **trung lập hệ thống pháp luật** (thêm nước = cấu hình), nạp lát **FDI Việt Nam** trước. Mọi output neo tới điều–khoản + ngày hiệu lực, có người ký duyệt.
 >
-> Trạng thái: **nghiên cứu + kiến trúc đã xong, chưa code sản phẩm.** Tài liệu này là điểm vào.
+> Trạng thái: **đã có engine và kiểm thử tích hợp; chưa sẵn sàng production.** Hướng dẫn kiến trúc bên dưới cần đọc cùng mã hiện tại và báo cáo audit.
+
+Đã nối **chỉ mục FTS + BGE → model Ollama local → kiểm trích dẫn/NLI → API và nguồn trên giao diện**. Xem [cấu hình, reindex sau nạp dữ liệu và kết quả kiểm thử 11/11/2026](docs/local-ai-wiring-2026-11-11.md). Chưa đặt cấu hình thì AI ở chế độ `disabled`; Echo chỉ dùng khi chọn `demo`.
 
 > 👩‍💻 **Dev bắt đầu code?** Mở **[`CONTRIBUTING.md`](CONTRIBUTING.md)** (START HERE) — đọc gì · code từ file nào · thứ tự khởi công · Definition of Done. *(File `TraLuat-KienTruc.docx` chỉ để đọc tổng quan, KHÔNG code từ đó.)*
 
@@ -25,7 +27,7 @@ Deep research (2 report + 9 repo đọc sâu) xác nhận: **~70% hạ tầng t�
 
 ### Người mới / stakeholder (hiểu toàn cảnh)
 0. ⭐ [`docs/scope-and-priorities.md`](docs/scope-and-priorities.md) — **kim chỉ nam: xây trước / backlog / KHÔNG xây + bộ lọc 1-câu-hỏi** (đọc đầu tiên để không lan man).
-0b. 🔒 [`docs/feature-registry.md`](docs/feature-registry.md) — **sổ cái 33 FR + 6 CN: toàn bộ tính năng + spec sở hữu + trạng thái = chống bỏ sót khi code.** · 🥊 [`docs/competitive-landscape.md`](docs/competitive-landscape.md) — đối thủ + moat nào còn trống.
+0b. 🔒 [`docs/feature-registry.md`](docs/feature-registry.md) — **sổ cái 41 FR + 6 CN: toàn bộ tính năng + spec sở hữu + trạng thái.** · 🥊 [`docs/competitive-landscape.md`](docs/competitive-landscape.md) — đối thủ + moat nào còn trống.
 1. [`docs/architecture.md`](docs/architecture.md) — tổng quan 4 tầng + 5 nguyên tắc.
 2. [`docs/roadmap.md`](docs/roadmap.md) — 6 phase (dependency-ordered, mỗi phase có cổng số).
 3. [`docs/platform-architecture-audit.md`](docs/platform-architecture-audit.md) — platform có gì · tính năng gì · xử lý/lưu trữ thế nào · bổ sung.
@@ -106,7 +108,7 @@ Quy tắc: rule được thì dùng rule → không thì ML nhỏ local → cùn
 4. Dựng **harness eval (L13) sớm** — có thước đo 3 chiều trước khi xây retrieval.
 5. Acceptance đầu tiên phải xanh: **"văn bản tại ngày T"** trên 1 nghị định có sửa đổi (W2 §8).
 
-*(Thư mục `src/` hiện chỉ là phác thảo minh hoạ schema L3 — không phải code sản phẩm, có thể bỏ qua.)*
+*`src/traluat/` chứa engine và runtime đang phát triển; các model/provider thật, dữ liệu được duyệt và cổng phát hành vẫn cần được cấu hình riêng.*
 
 ---
 
@@ -114,3 +116,26 @@ Quy tắc: rule được thì dùng rule → không thì ML nhỏ local → cùn
 - **`meta.json`** schema thật của raw data → chốt mapping W1 (hiện là placeholder).
 - Mốc thời gian cụ thể → gắn calendar vào `roadmap.md` (đội tech mạnh & đông; pháp nhân VN đã được cho phép).
 - Vài điểm pháp lý cần đọc **văn bản gốc** — danh sách ở `compliance-vn.md §5`.
+
+## Chạy và kiểm thử sau audit
+
+Cài package và phần geo cần cho migration: `uv sync --locked --extra geo`.
+Runtime dùng factory `uvicorn traluat.w5.asgi:app_from_env --factory`; đặt `DATABASE_URL`
+bằng login PostgreSQL **không superuser, không sở hữu bảng**, được cấp role `traluat_app`,
+và đặt `JWT_SECRET` riêng tối thiểu 32 ký tự. Compose dùng biến `APP_DATABASE_URL` cho
+API/worker, chỉ bind các cổng dịch vụ lên localhost; không tự tạo credential runtime.
+Các bước cấp quyền, danh tính và giới hạn phát hành được ghi trong
+[`docs/audit-fixes-2026-11-10.md`](docs/audit-fixes-2026-11-10.md).
+
+Test PostgreSQL cần `TEST_DATABASE_URL` trỏ đến một database riêng đã tồn tại có tên
+kết thúc `_test` hoặc bắt đầu `test_`. Harness chỉ migrate database được chỉ định,
+**không DROP/CREATE database**. Không đặt biến này thì chỉ chạy test thuần, các test
+DB sẽ skip; CI đặt thêm `REQUIRE_TEST_DATABASE=1` để thiếu DB là lỗi.
+
+Reference suy từ luật cần `source_eid` đã nhập và còn áp dụng; sửa dữ liệu phải dùng
+version mới, thay đổi chồng thời gian cần `reviewed_change=True` từ quy trình duyệt.
+Dataset chưa có contract phải đăng ký contract trước khi nạp. Mẫu dùng chung chỉ
+nhận bản trống đã duyệt (`public_reviewed=True`, `provenance='public_template'`);
+không đưa hợp đồng đã điền hoặc dữ liệu khách vào kho mẫu công khai.
+`scripts/seed_deadlines.py` chỉ publish khi người vận hành đã rà bundle minh họa
+theo nguồn gốc và truyền `--reviewed`; source chưa nhập/không áp dụng vẫn bị quarantine.

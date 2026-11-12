@@ -2,7 +2,7 @@
 
 HashEmbedder: embedding băm (ổn định, cùng dim) — chỗ-giữ cho bge-m3.
 NoopReranker: giữ nguyên thứ tự — chỗ-giữ cho cross-encoder.
-HoldNLI: luôn 'hold' (không PROMOTE, không veto) — gate3 trung tính tới khi cắm NLI thật.
+HoldNLI: luôn 'hold' — chỉ cho phép nguyên câu trích xuất, không hỗ trợ diễn giải.
 """
 
 from __future__ import annotations
@@ -39,6 +39,8 @@ class NoopReranker:
 
 
 class HoldNLI:
+    demo_only = True
+
     def supports(self, claim: str, source: str) -> NLIVerdict:
         return "hold"
 
@@ -47,8 +49,11 @@ class KeywordNLIVerifier:
     """STUB tất định — 'promote' nếu phần lớn từ của claim có trong nguồn, else 'hold'.
 
     Chỗ-giữ cho NLI thật (ViLegalBERT / LLM-as-NLI structured {support, span}).
-    gate3 chỉ PROMOTE/HOLD (không veto) nên stub lạc quan vẫn an toàn.
+    Không phải verifier pháp lý; chỉ dùng test wiring/đo overlap. Grounding không
+    dùng PROMOTE của stub này để chấp nhận diễn giải.
     """
+
+    demo_only = True
 
     def __init__(self, threshold: float = 0.6) -> None:
         self.threshold = threshold

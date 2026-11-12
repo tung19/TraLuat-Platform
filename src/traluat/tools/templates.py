@@ -2,14 +2,32 @@
 
 from __future__ import annotations
 
+import json
+import re
+
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from ..w2.models import Template
+from .reference import has_pii
+
+
+class TemplateQuarantined(ValueError):
+    """Unreviewed, tenant-origin, or personally identifying public template."""
 
 
 def add_template(session: Session, kind: str, title: str, body: str, *,
-                 slots: list[str] | None = None, lang: str = "vi", embedder=None) -> Template:
+                 slots: list[str] | None = None, lang: str = "vi", embedder=None,
+                 public_reviewed: bool = False, provenance: str = "public_template") -> Template:
+    # This is a shared public store; review is explicit and happens before embedding.
+    if not public_reviewed or provenance != "public_template":
+        raise TemplateQuarantined("public template requires review and public provenance")
+    blob = " ".join((kind, title, body, lang, json.dumps(slots or [], ensure_ascii=False)))
+    if has_pii(blob) or re.search(r"\b\d{9}\b", blob):
+        raise TemplateQuarantined("template contains personal identifiers; use empty placeholders")
+    from .forms import FormField
+    for slot in slots or []:
+        FormField.parse(slot)
     emb = embedder.embed([body])[0] if embedder is not None else None
     t = Template(kind=kind, title=title, body=body, slots=slots or [], lang=lang, embedding=emb)
     session.add(t)

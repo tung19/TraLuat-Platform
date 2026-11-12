@@ -5,14 +5,8 @@ KHÔNG rời VN, fail-closed, R2 không-failover) + audit write-ahead + nhãn AI
 FastAPI/Celery/RLS (infra lift PAKTON) cắm trên lõi này sau. Spec: docs/specs/w5-backend.md.
 """
 
-from .tenancy import MissingTenant, ResidencyViolation, TenantContext, require_role
-from .egress import DataClass, EgressPolicy, LLMDestination, RouteDecision
 from .audit import AuditEntry, AuditLog, PostgresAuditLog
-from .models import AnalysisTask, AuditLogRow, Tenant, TenantUser
-from .tasks import CeleryTaskQueue, InMemoryTaskQueue, TaskQueue, TaskRunner
-from .service import LegalService, ServiceResponse
 from .auth import decode_context
-from .rls import rls_ddl, set_tenant
 from .crypto import (
     AwsKmsProvider,
     CryptoShredded,
@@ -22,15 +16,43 @@ from .crypto import (
     TenantCrypto,
     VaultTransitProvider,
 )
+from .egress import DataClass, EgressPolicy, LLMDestination, RouteDecision
+from .models import AnalysisTask, AuditLogRow, Tenant, TenantUser
+from .rls import rls_ddl, set_tenant
+from .service import LegalService, ServiceResponse
+from .tasks import CeleryTaskQueue, InMemoryTaskQueue, TaskQueue, TaskRunner
+from .tenancy import MissingTenant, ResidencyViolation, TenantContext, require_role
 
 __all__ = [
-    "TenantContext", "MissingTenant", "ResidencyViolation", "require_role",
-    "EgressPolicy", "DataClass", "LLMDestination", "RouteDecision",
-    "AuditLog", "AuditEntry", "PostgresAuditLog",
-    "Tenant", "TenantUser", "AuditLogRow", "AnalysisTask",
-    "TaskRunner", "TaskQueue", "InMemoryTaskQueue", "CeleryTaskQueue",
-    "LegalService", "ServiceResponse",
-    "decode_context", "rls_ddl", "set_tenant",
-    "TenantCrypto", "SoftwareKMS", "KMSProvider", "CryptoShredded",
-    "RemoteKMSProvider", "AwsKmsProvider", "VaultTransitProvider",
+    "AnalysisTask",
+    "AuditEntry",
+    "AuditLog",
+    "AuditLogRow",
+    "AwsKmsProvider",
+    "CeleryTaskQueue",
+    "CryptoShredded",
+    "DataClass",
+    "EgressPolicy",
+    "InMemoryTaskQueue",
+    "KMSProvider",
+    "LLMDestination",
+    "LegalService",
+    "MissingTenant",
+    "PostgresAuditLog",
+    "RemoteKMSProvider",
+    "ResidencyViolation",
+    "RouteDecision",
+    "ServiceResponse",
+    "SoftwareKMS",
+    "TaskQueue",
+    "TaskRunner",
+    "Tenant",
+    "TenantContext",
+    "TenantCrypto",
+    "TenantUser",
+    "VaultTransitProvider",
+    "decode_context",
+    "require_role",
+    "rls_ddl",
+    "set_tenant",
 ]

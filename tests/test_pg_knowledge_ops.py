@@ -15,7 +15,7 @@ from traluat.w2 import repo
 from traluat.w2.db import make_engine
 
 D = dt.date
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 ND50 = "Điều 1. Bãi bỏ Điều 5 của Nghị định số 99/2020/NĐ-CP kể từ ngày 01/6/2023."
 

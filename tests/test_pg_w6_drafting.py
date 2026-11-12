@@ -8,15 +8,15 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from traluat.w1 import build_ingest, load_to_w2
 from traluat.tools.templates import add_template, match_templates
+from traluat.w1 import build_ingest, load_to_w2
 from traluat.w2.db import make_engine
 from traluat.w3 import EchoLLMGateway
 from traluat.w6 import PetitionDraftService
 
 D = dt.date
 FRBR = "trl:vn/nd/99/2020"
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 
 @pytest.fixture()
@@ -44,7 +44,7 @@ def session():
 def test_draft_from_template_grounded(session: Session):
     add_template(session, "don_dang_ky", "Đơn đăng ký doanh nghiệp",
                  "CỘNG HÒA XÃ HỘI... Đơn đăng ký. Vốn pháp định: {von}. Căn cứ: {can_cu}.",
-                 slots=["von", "can_cu"])
+                 slots=["von", "can_cu"], public_reviewed=True)
     assert match_templates(session, kind="don_dang_ky")      # TES có mẫu
 
     svc = PetitionDraftService(session, gateway=EchoLLMGateway())
@@ -66,7 +66,8 @@ def test_fill_template_form_validates_and_fills(session: Session):
     add_template(session, "don_xin_phep",
                  "Đơn xin phép", "Tôi {ho_ten}, nộp ngày {ngay}.",
                  slots=[{"name": "ho_ten", "label": "Họ tên", "required": True},
-                        {"name": "ngay", "label": "Ngày", "type": "date", "required": True}])
+                        {"name": "ngay", "label": "Ngày", "type": "date", "required": True}],
+                 public_reviewed=True)
     # thiếu bắt buộc → lỗi, không điền
     text, errs = fill_template(session, "don_xin_phep", {"ho_ten": "Trần B"})
     assert errs and text == "Tôi {ho_ten}, nộp ngày {ngay}."

@@ -14,7 +14,7 @@ from traluat.w2.db import make_engine
 from traluat.w2.models import Document, NormRelation, Unit, UnitVersion
 
 D = dt.date
-UTC = dt.timezone.utc
+UTC = dt.UTC
 
 
 @pytest.fixture()

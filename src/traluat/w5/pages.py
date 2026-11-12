@@ -120,20 +120,24 @@ const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]
 function hdr(j){const h={'Authorization':'Bearer '+document.getElementById('tok').value};
   if(j)h['Content-Type']='application/json';return h;}
 function cites(a){return (a||[]).map(c=>'<span class=cite>'+esc(c)+'</span>').join('');}
+function evidence(d){return (d.sources||[]).map(s=>'<details><summary>'+esc(s.title)
+  +' · '+esc(s.as_of)+'</summary><pre>'+esc(s.text)+'</pre></details>').join('');}
+function answerView(d,text){
+  if(d.abstain)return '<p class=ab>Chưa thể trả lời có căn cứ từ kho văn bản hiện có.</p>';
+  return (d.is_demo?'<p class=ab>Bản mô phỏng: nội dung trích xuất để kiểm thử.</p>':'')
+    +'<pre>'+esc(text)+'</pre>'+evidence(d)
+    +(d.caveat?'<p class=ab>Có thay đổi pháp luật đang chờ xử lý; cần chuyên gia kiểm tra.</p>':'')
+    +'<small>Nội dung do AI hỗ trợ. Mở nguồn bên trên để đối chiếu.</small>';}
 async function lookup(){const o=document.getElementById('lout');o.innerHTML='...';
   const r=await fetch('/lookup',{method:'POST',headers:hdr(1),body:JSON.stringify(
     {query:lq.value,as_of:la.value})});const d=await r.json();
   if(r.status!=200){o.innerHTML='<p class=ab>Lỗi '+r.status+'</p>';return;}
-  o.innerHTML=d.abstain?('<p class=ab>⛔ abstain: '+esc(d.reason)+'</p>')
-    :('<pre>'+esc(d.text)+'</pre><p>'+cites(d.citations)+'</p>')
-    +'<small>🤖 AI · route='+esc(d.route.destination)+' · trace='+esc(d.trace_id)+'</small>';}
+  o.innerHTML=answerView(d,d.text);}
 async function summarize(){const o=document.getElementById('sout');o.innerHTML='...';
   const r=await fetch('/summarize',{method:'POST',headers:hdr(1),body:JSON.stringify(
     {topic:sq.value,as_of:sa2.value})});const d=await r.json();
   if(r.status!=200){o.innerHTML='<p class=ab>Lỗi '+r.status+'</p>';return;}
-  o.innerHTML=d.abstain?('<p class=ab>⛔ abstain: '+esc(d.reason)+'</p>')
-    :('<pre>'+esc(d.summary)+'</pre><p>'+cites(d.citations)+'</p>')
-    +'<small>🤖 AI · route='+esc(d.route.destination)+'</small>';}
+  o.innerHTML=answerView(d,d.summary);}
 async function deadline(){const o=document.getElementById('wout');o.innerHTML='...';
   const q=new URLSearchParams({kind:wk.value,start:ws.value,as_of:wa.value});
   const r=await fetch('/deadline?'+q,{headers:hdr()});const d=await r.json();

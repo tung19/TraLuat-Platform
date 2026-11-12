@@ -11,13 +11,13 @@ Chạy worker: `celery -A traluat.w5.celery_app.celery_app worker -l info`
 from __future__ import annotations
 
 import os
-from typing import Callable
+from collections.abc import Callable
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from .models import AnalysisTask
-from .rls import set_tenant
+from .rls import ensure_runtime_login, set_tenant
 
 # handler đăng ký theo kind: (session, payload) -> dict (result)
 _HANDLERS: dict[str, Callable[[Session, dict], dict]] = {}
@@ -65,15 +65,19 @@ def _make_celery():
 
     @app.task(bind=True, name="traluat.run_task", max_retries=3, default_retry_delay=5)
     def run_task(self, task_id: str, tenant_id: str):  # pragma: no cover — prod shell
-        from .db import make_session_factory
+        from ..w2.db import make_session_factory
         s = make_session_factory()()
         try:
+            ensure_runtime_login(s)
             status = run_task_body(s, task_id, tenant_id)
             s.commit()
             return status
-        except Exception as e:  # lỗi hạ-tầng → retry
+        except (sa.exc.OperationalError, sa.exc.InterfaceError, ConnectionError, TimeoutError) as e:
             s.rollback()
             raise self.retry(exc=e)
+        except Exception:
+            s.rollback()
+            raise
         finally:
             s.close()
 

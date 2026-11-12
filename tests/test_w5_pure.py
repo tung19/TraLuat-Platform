@@ -3,8 +3,13 @@
 import pytest
 
 from traluat.w5 import (
-    AuditLog, DataClass, EgressPolicy, LLMDestination, MissingTenant,
-    TenantContext, require_role,
+    AuditLog,
+    DataClass,
+    EgressPolicy,
+    LLMDestination,
+    MissingTenant,
+    TenantContext,
+    require_role,
 )
 
 

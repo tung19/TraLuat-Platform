@@ -10,6 +10,7 @@ geoalchemy2 là **optional** (extra `geo`); import lười để core chạy kh�
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 
@@ -68,12 +69,15 @@ def add_directory_entry(
     """Thêm 1 mục danh bạ. Chặn CCCD (quarantine). Toạ độ (lat,lon)→geom WGS84."""
     if kind not in DIRECTORY_KINDS:
         raise ValueError(f"kind không hợp lệ: {kind}")
-    blob = " ".join(x for x in (name, address, str(extra or "")) if x)
+    blob = " ".join(x for x in (name, address, province, phone, email, str(extra or "")) if x)
     if _CCCD.search(blob):
-        raise DirectoryQuarantined(f"{name}: chứa CCCD — không publish danh bạ công")
+        raise DirectoryQuarantined("chứa CCCD — không publish danh bạ công")
 
     geom = None
+    if (lat is None) != (lon is None):
+        raise ValueError("lat and lon must be supplied together")
     if lat is not None and lon is not None:
+        _coordinates(lat, lon)
         geom = sa.func.ST_SetSRID(sa.func.ST_MakePoint(lon, lat), 4326)  # (x=lon, y=lat)
     row = Directory(kind=kind, name=name, address=address, province=province,
                     phone=phone, email=email, geom=geom, extra=extra)
@@ -88,6 +92,13 @@ def nearby(
 ) -> list[NearbyHit]:
     """KNN danh bạ trong bán kính `radius_m` quanh (lat,lon), gần→xa. Dùng geography để
     tính mét chính xác (ST_DWithin + ST_Distance), sắp theo khoảng cách."""
+    _coordinates(lat, lon)
+    if not math.isfinite(radius_m) or not 0 < radius_m <= 1_000_000:
+        raise ValueError("radius_m must be finite and between 0 and 1,000,000")
+    if not 1 <= limit <= 100:
+        raise ValueError("limit must be between 1 and 100")
+    if kind is not None and kind not in DIRECTORY_KINDS:
+        raise ValueError("invalid directory kind")
     pt = sa.func.ST_SetSRID(sa.func.ST_MakePoint(lon, lat), 4326)
     geog = _Geography()
     # ::geography → khoảng cách tính bằng MÉT (không phải độ)
@@ -108,3 +119,8 @@ def nearby(
 def _Geography():
     from geoalchemy2 import Geography
     return Geography()
+
+
+def _coordinates(lat, lon):
+    if not math.isfinite(lat) or not math.isfinite(lon) or not -90 <= lat <= 90 or not -180 <= lon <= 180:
+        raise ValueError("invalid WGS84 coordinates")

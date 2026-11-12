@@ -13,9 +13,9 @@ from __future__ import annotations
 import datetime as dt
 import json
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 from sqlalchemy.orm import Session
 
@@ -76,10 +76,12 @@ class EvalReport:
         for tag, rs in agg.items():
             ps = [r.precision for r in rs if r.precision is not None]
             rc = [r.recall for r in rs if r.recall is not None]
+            om = [r.omission_recall for r in rs if r.omission_recall is not None]
             out[tag] = {
                 "n": len(rs),
                 "precision": sum(ps) / len(ps) if ps else None,
                 "recall": sum(rc) / len(rc) if rc else None,
+                "omission_recall": sum(om) / len(om) if om else None,
             }
         return out
 
@@ -99,24 +101,35 @@ class EvalReport:
         scored = [r for r in self.results if r.recall is not None]
         if not scored:
             return None
-        return sum((r.confidence - (1.0 if (r.recall or 0) >= 1.0 else 0.0)) ** 2
+        return sum((r.confidence - (1.0 if (r.recall or 0) >= 1.0
+                                   and (r.omission_recall is None or r.omission_recall >= 1.0)
+                                   else 0.0)) ** 2
                    for r in scored) / len(scored)
 
-    def gate(self, min_recall: dict[str, float] | None = None) -> tuple[bool, list[str]]:
+    def gate(self, min_recall: dict[str, float] | None = None, *,
+             min_omission_recall: float = 1.0) -> tuple[bool, list[str]]:
         """Cổng CI (fail-safe). Fail nếu: trả lời ca BẪY · abstain ca đáng-trả ·
         recall[tag] dưới ngưỡng. Trả (pass, danh sách lý do fail)."""
         failures: list[str] = []
+        if not self.results:
+            failures.append("empty evaluation set")
+        if not 0.0 <= min_omission_recall <= 1.0:
+            raise ValueError("min_omission_recall must be between 0 and 1")
         cells = self.abstention_cells()
         if cells["answer_when_should_abstain"]:
             failures.append(f"trả lời {cells['answer_when_should_abstain']} ca bẫy")
         if cells["abstain_when_should_answer"]:
             failures.append(f"abstain {cells['abstain_when_should_answer']} ca đáng-trả")
+        for r in self.results:
+            if r.omission_recall is not None and r.omission_recall < min_omission_recall:
+                failures.append(f"omission_recall[{r.case_id}]={r.omission_recall} < {min_omission_recall}")
         if min_recall:
             bt = self.by_tag()
             for tag, thr in min_recall.items():
-                r = bt.get(tag, {}).get("recall")
+                metric = "omission_recall" if tag in {"omission", "catch-omission"} else "recall"
+                r = bt.get(tag, {}).get(metric)
                 if r is None or r < thr:
-                    failures.append(f"recall[{tag}]={r} < {thr}")
+                    failures.append(f"{metric}[{tag}]={r} < {thr}")
         return (not failures, failures)
 
     def summary(self) -> str:

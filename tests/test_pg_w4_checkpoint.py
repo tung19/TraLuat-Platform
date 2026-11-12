@@ -11,19 +11,26 @@ from traluat.w1 import build_ingest, load_to_w2
 from traluat.w2.db import make_engine
 from traluat.w3 import EchoLLMGateway
 from traluat.w4 import (
-    CaseInput, CrossTenantCheckpoint, DebateCheckpoint, InMemoryCheckpointer,
-    MultiRoleReasoner, PostgresCheckpointer, RoleConfig,
+    CaseInput,
+    CrossTenantCheckpoint,
+    DebateCheckpoint,
+    InMemoryCheckpointer,
+    MultiRoleReasoner,
+    PostgresCheckpointer,
+    RoleConfig,
 )
 
 D = dt.date
 FRBR = "trl:vn/nd/99/2020"
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 ROLES = [RoleConfig("lawyer", "quyền lợi"), RoleConfig("judge", "")]
 ELEMENTS = {"nd99__dieu_3__khoan_2": ["vốn pháp định"]}   # 1 điều có checklist → gọi judge
 
 
 class CountingJudge:
+    checkpoint_version = "counting-keyword-v1"
+
     def __init__(self):
         from traluat.w4 import KeywordElementJudge
         self.calls = 0
@@ -82,3 +89,17 @@ def test_postgres_checkpointer_roundtrip_and_prefix(session: Session):
     # ★ C3: tenant khác đọc cùng thread → chặn (checkpointer không có RLS)
     with pytest.raises(CrossTenantCheckpoint):
         cp.load("tenant:t1:c9", "t2")
+
+
+def test_resume_reaudits_after_canonical_amendment(session: Session):
+    from traluat.w2 import repo
+    cp = InMemoryCheckpointer()
+    first = CountingJudge()
+    _mr(session, first).run(CASE, D(2022, 1, 1), tenant_id="t1", case_id="c1", checkpointer=cp)
+    assert first.calls > 0
+    repo.apply_amendment(session, "nd99__dieu_3__khoan_2",
+                         "Mức vốn pháp định tối thiểu là 30 tỷ đồng.", D(2022, 1, 1),
+                         source_relation_id="checkpoint-regression")
+    second = CountingJudge()
+    _mr(session, second).run(CASE, D(2022, 1, 1), tenant_id="t1", case_id="c1", checkpointer=cp)
+    assert second.calls > 0  # the old verified pool must not survive a KB change

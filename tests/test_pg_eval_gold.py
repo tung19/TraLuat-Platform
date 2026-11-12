@@ -16,7 +16,7 @@ from traluat.w3 import EchoLLMGateway, answer_question
 D = dt.date
 FRBR = "trl:vn/nd/99/2020"
 GOLD = Path(__file__).resolve().parents[1] / "eval" / "gold" / "smoke.jsonl"
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 
 @pytest.fixture()

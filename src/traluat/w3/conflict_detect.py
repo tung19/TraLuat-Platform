@@ -67,7 +67,7 @@ class ConflictCandidate:
 @dataclass
 class ConflictFinding:
     candidate: ConflictCandidate
-    resolution: "repo.ConflictResult"
+    resolution: repo.ConflictResult
 
 
 @runtime_checkable

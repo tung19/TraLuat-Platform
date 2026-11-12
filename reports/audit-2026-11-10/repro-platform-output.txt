@@ -1,0 +1,4 @@
+AUTH: arbitrary tenant/owner token with no expiration accepted
+AUTHZ: ordinary tenant owner reaches shared-KB approval method
+EGRESS: lookup and summarize select Claude for raw synthetic private text
+CELERY: real task wrapper fails importing nonexistent traluat.w5.db

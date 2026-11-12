@@ -8,29 +8,25 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: traluat
-          POSTGRES_PASSWORD: traluat
-          POSTGRES_DB: traluat
-        ports:
-          - "5432:5432"
-        options: >-
-          --health-cmd "pg_isready -U traluat -d traluat"
-          --health-interval 3s --health-timeout 3s --health-retries 30
     env:
-      # trỏ DB về service (port 5432); model extra KHÔNG cài → test model tự skip.
-      DATABASE_URL: postgresql+psycopg://traluat:traluat@localhost:5432/traluat
+      TEST_DATABASE_URL: postgresql+psycopg://traluat:traluat@localhost:5433/traluat_test
+      REQUIRE_TEST_DATABASE: "1"
+      JWT_SECRET: ci-test-key-do-not-use-outside-ci-123456789
+      # Only postgres is started; compose still requires interpolation for inactive profiles.
+      APP_DATABASE_URL: postgresql+psycopg://unused_runtime_login@postgres/traluat
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - name: Sync deps (core + dev, không model)
-        run: uv sync
-      - name: Migrate (tạo schema + RLS + role)
-        run: uv run alembic upgrade head
+      - name: Build PostgreSQL with vector and PostGIS
+        run: |
+          docker compose up --build --wait postgres
+          docker compose exec -T postgres createdb -U traluat traluat_test
+      - name: Sync installed package, core, geo and dev dependencies
+        run: uv sync --locked --extra geo
       - name: Test — PG chạy, model tự skip (eval-gate smoke nằm trong đây)
-        run: uv run python -m pytest tests/ -q
-      - name: Lint (không chặn)
-        run: uv run ruff check src tests || true
+        run: uv run --locked --extra geo python -m pytest tests/ -q
+      - name: Lint
+        run: uv run --locked --extra geo ruff check src tests scripts
+      - name: Stop database
+        if: always()
+        run: docker compose down

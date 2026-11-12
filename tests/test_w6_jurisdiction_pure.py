@@ -4,7 +4,7 @@ import datetime as dt
 
 import pytest
 
-from traluat.w6 import JurisdictionPack, VN_PACK, get_pack, load_pack, register_pack
+from traluat.w6 import VN_PACK, JurisdictionPack, get_pack, load_pack, register_pack
 
 D = dt.date
 

@@ -16,9 +16,10 @@ Audit fixes embedded:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from dataclasses import dataclass, field, replace
+from datetime import UTC, date, datetime
 from enum import Enum
+from itertools import pairwise
 
 
 class EffectStatus(str, Enum):
@@ -34,7 +35,7 @@ class BitemporalCorruption(Exception):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @dataclass
@@ -182,8 +183,8 @@ def apply_amendment(
     # idempotent
     if source_relation_id and any(
         v.source_relation_id == source_relation_id
+        and v.unit_eid == target_eid and v.lang == lang
         and v.valid_from == effective_date
-        and v.tx_to is None
         for v in versions
     ):
         return versions
@@ -198,17 +199,17 @@ def apply_amendment(
 
     if covering:
         v = covering[0]
-        if v.valid_from == effective_date:  # same-date fold theo order_key
-            if order_key >= v.order_key:
-                v.text, v.status, v.order_key = new_text, status, order_key
-                v.source_relation_id = source_relation_id
-                v.applies_from, v.transitional = applies_from, transitional
+        if v.valid_from == effective_date and order_key < v.order_key:
             return versions
-        old_to = v.valid_to          # có thể None (tail mở) hoặc date (giữa chuỗi)
-        v.valid_to = effective_date  # cắt
-        new_to = old_to
+        if now < v.tx_from:
+            raise BitemporalCorruption("transaction-time không được đi lùi")
+        new_to = v.valid_to
+        v.tx_to = now               # preserve the entire previous belief
+        if v.valid_from < effective_date:
+            versions.append(replace(v, valid_to=effective_date, tx_from=now, tx_to=None))
     else:
-        new_to = None                # không bản nào phủ: segment mới mở
+        future = [v.valid_from for v in current if v.valid_from > effective_date]
+        new_to = min(future) if future else None
 
     versions.append(
         UnitVersion(
@@ -233,7 +234,7 @@ def _assert_no_overlap(versions, unit_eid, lang) -> None:
         (v for v in versions if v.unit_eid == unit_eid and v.lang == lang and v.tx_to is None),
         key=lambda v: v.valid_from,
     )
-    for prev, cur in zip(open_rows, open_rows[1:]):
+    for prev, cur in pairwise(open_rows):
         if prev.valid_to is None or cur.valid_from < prev.valid_to:
             raise BitemporalCorruption(
                 f"{unit_eid}: khoảng valid-time chồng nhau "

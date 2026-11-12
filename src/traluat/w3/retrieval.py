@@ -4,13 +4,14 @@
 mang effect_status@as_of; EXPIRED_CITABLE/TRANSITIONAL vẫn trả (kèm nhãn), chỉ
 HẠ ưu tiên khỏi 'thắng'; NOT_YET đánh dấu 'chưa hiệu lực'.
 
-⚠️ Slice-1 dùng chấm điểm LEXICAL tất định (overlap token) làm chỗ-giữ. Defer:
-BM25 tiếng Việt + dense bge-m3 (1024d) + RRF + cross-encoder rerank (§1, build#2).
+`retrieve` giữ đường lexical/demo cho core tests; runtime dùng IndexedRetriever:
+FTS + dense bge-m3 (1024d) + RRF. BM25 tiếng Việt/cross-encoder chưa cấu hình.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import math
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -18,9 +19,12 @@ from dataclasses import dataclass
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
+from ..w2 import repo
 from ..w2.bitemporal import EffectStatus
-from ..w2.models import Chunk as ChunkRow, Document
+from ..w2.models import Chunk as ChunkRow
+from ..w2.models import Document, Unit
 from .chunker import Chunk, build_chunks
+from .indexer import embedding_identity, validate_vectors
 
 _APPLICABLE = {EffectStatus.IN_FORCE, EffectStatus.TRANSITIONAL_APPLIES}
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
@@ -104,18 +108,26 @@ def retrieve_indexed(
     session: Session, query: str, as_of: dt.date, *,
     lang: str = "vi", namespaces: tuple[str, ...] = ("kb",), top_k: int = 8,
     embedder=None, rrf_c: int = 60,
+    scope_frbr_uris: list[str] | None = None,
+    known_as_of: dt.datetime | None = None,
 ) -> list[RetrievedChunk]:
     """L4-backed retrieval — PUSH-DOWN as_of+namespace+lang trong SQL, rồi HYBRID
-    BM25 (ts_rank_cd) + dense (pgvector cosine) → RRF. Keep-and-mark: giữ cả expired
+    FTS (ts_rank_cd) + dense (pgvector cosine) → RRF. Keep-and-mark: giữ cả expired
     (valid_to≤as_of) nhưng hạ ưu tiên (applicable=False). namespaces = ('kb',) hoặc
     + 'tenant:<id>' — KHÔNG trộn tenant khác."""
     # ① push-down predicate (rẻ, giảm candidate TRƯỚC vector/rank)
+    if not 1 <= top_k <= 100:
+        raise ValueError("top_k must be between 1 and 100")
+    known = known_as_of or repo._db_now(session)
     scope = sa.and_(
         ChunkRow.lang == lang, ChunkRow.namespace.in_(namespaces),
         ChunkRow.valid_from <= as_of)
+    if scope_frbr_uris is not None:
+        scope = sa.and_(scope, ChunkRow.unit_id.in_(
+            sa.select(Unit.id).join(Document).where(Document.frbr_uri.in_(scope_frbr_uris))))
     wide = top_k * 5
 
-    # ② BM25 (FTS 'simple')
+    # ② PostgreSQL FTS 'simple' (not BM25)
     tsq = sa.func.plainto_tsquery("simple", query)
     bm = session.execute(
         sa.select(ChunkRow, sa.func.ts_rank_cd(ChunkRow.tsv, tsq).label("r"))
@@ -125,10 +137,13 @@ def retrieve_indexed(
     # ③ dense (pgvector cosine) — chỉ khi có embedder + embedding đã index
     dense = []
     if embedder is not None:
-        qv = embedder.embed([query])[0]
+        vectors = embedder.embed([query])
+        validate_vectors(vectors, 1)
+        qv = vectors[0]
         dense = session.execute(
             sa.select(ChunkRow, ChunkRow.embedding.cosine_distance(qv).label("d"))
-            .where(scope, ChunkRow.embedding.is_not(None))
+            .where(scope, ChunkRow.embedding.is_not(None),
+                   ChunkRow.embedding_model == embedding_identity(embedder))
             .order_by(sa.asc("d")).limit(wide)).all()
 
     # ④ RRF fuse theo id (1/(c+rank) mỗi danh sách)
@@ -141,6 +156,40 @@ def retrieve_indexed(
         rrf[row.id] = rrf.get(row.id, 0.0) + 1.0 / (rrf_c + rank)
         rows[row.id] = row
 
-    out = [_row_to_rc(rows[i], as_of, s) for i, s in rrf.items()]
+    out, seen = [], set()
+    for i, score in rrf.items():
+        row = rows[i]
+        text, status = repo.citable_text(session, row.eid, as_of, lang, known_as_of=known)
+        # Indexes are derived. A stale amendment must never become model context.
+        if text != row.span_text or row.eid in seen:
+            continue
+        seen.add(row.eid)
+        rc = _row_to_rc(row, as_of, score)
+        rc.chunk.frbr_uri = session.scalar(sa.select(Document.frbr_uri).join(Unit).where(
+            Unit.id == row.unit_id))
+        rc.chunk.effect_status = status
+        rc.applicable = status in _APPLICABLE
+        out.append(rc)
     out.sort(key=lambda r: (r.applicable, r.score, r.unit_eid), reverse=True)
     return out[:top_k]
+
+
+class IndexedRetriever:
+    """Reusable runtime adapter; query-only embeddings, canonical evidence validation."""
+
+    def __init__(self, embedder=None, reranker=None):
+        self.embedder = embedder
+        self.reranker = reranker
+
+    def __call__(self, session, query, as_of, *, top_k=8, **kwargs):
+        candidates = retrieve_indexed(session, query, as_of, embedder=self.embedder,
+                                      top_k=min(top_k * 3, 100) if self.reranker else top_k,
+                                      **kwargs)
+        if self.reranker and candidates:
+            scores = self.reranker.rerank(query, [c.chunk.embed_text for c in candidates])
+            if len(scores) != len(candidates) or not all(math.isfinite(x) for x in scores):
+                raise ValueError("reranker returned invalid scores")
+            for candidate, score in zip(candidates, scores):
+                candidate.score = score
+            candidates.sort(key=lambda c: (c.applicable, c.score), reverse=True)
+        return candidates[:top_k]

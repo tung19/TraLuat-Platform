@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from ..w3 import Answer, answer_question
+from ..w3.local_gateway import LocalModelError
 from ..w3.ports import LLMGateway, NLIVerifier
 from ..w4 import Adjudication, CaseInput, ReasoningEngine
 from ..w4.auditor import ElementJudge
@@ -48,6 +49,8 @@ class LegalService:
         egress: EgressPolicy | None = None,
         audit: AuditLog | None = None,
         metrics=None,
+        knowledge_session_factory=None,
+        retriever=None,
     ) -> None:
         self.s = session
         self.local_gateway = local_gateway
@@ -58,6 +61,8 @@ class LegalService:
         self.egress = egress or EgressPolicy()
         self.audit = audit or AuditLog()
         self.metrics = metrics
+        self.knowledge_session_factory = knowledge_session_factory
+        self.retriever = retriever
 
     def _gateway_for(self, dest: LLMDestination) -> LLMGateway | None:
         if dest == LLMDestination.LOCAL:
@@ -79,7 +84,7 @@ class LegalService:
             data_class, local_available=local_available,
             claude_available=self.claude_gateway is not None)
         intent = self.audit.record_intent(
-            tenant_id=ctx.tenant_id, actor=actor, action=action, resource="case",
+            tenant_id=ctx.tenant_id, actor=ctx.subject or actor, action=action, resource="case",
             trace_id=trace_id, data_class=data_class.value,
             residency=ctx.residency_region, llm_destination=decision.destination.value)
         if self.metrics is not None:
@@ -107,10 +112,15 @@ class LegalService:
                                    reason=f"egress_denied:{decision.reason}")
         engine = ReasoningEngine(
             self.s, gateway=gateway, nli=self.nli,
-            element_judge=self.element_judge, elements_by_eid=self.elements_by_eid)
-        with span("service.analyze", trace_id=trace_id,
-                  **{"traluat.destination": decision.destination.value}):
-            adj = engine.analyze(case, as_of, tenant_id=ctx.tenant_id, lang=lang)
+            element_judge=self.element_judge, elements_by_eid=self.elements_by_eid,
+            retriever=self.retriever)
+        try:
+            with span("service.analyze", trace_id=trace_id,
+                      **{"traluat.destination": decision.destination.value}):
+                adj = engine.analyze(case, as_of, tenant_id=ctx.tenant_id, lang=lang)
+        except LocalModelError as exc:
+            self.audit.confirm(intent, "failed")
+            return ServiceResponse(False, trace_id, decision, reason=str(exc))
         self.audit.confirm(intent, "done")
         return ServiceResponse(True, trace_id, decision, adjudication=adj)
 
@@ -118,18 +128,24 @@ class LegalService:
         self, query: str, as_of: dt.date, ctx: TenantContext, *,
         local_available: bool | None = None, actor: str = "api",
         trace_id: str | None = None, lang: str = "vi",
+        scope_frbr_uris: list[str] | None = None,
     ) -> ServiceResponse:
-        """Câu hỏi THUẦN KB công (không tình tiết khách) → provenance public → được
-        ra Claude. Đây là đường duy nhất dữ liệu được rời VN (I3)."""
+        """Free-text client questions default to tenant-sensitive regardless of topic."""
         trace_id = trace_id or uuid.uuid4().hex
         decision, intent, gateway = self._route(
-            ctx, [PUBLIC_KB], "lookup", local_available, trace_id, actor)
+            ctx, [f"tenant:{ctx.tenant_id}", PUBLIC_KB], "lookup", local_available, trace_id, actor)
         if gateway is None:
             self.audit.confirm(intent, "denied")
             return ServiceResponse(False, trace_id, decision,
                                    reason=f"egress_denied:{decision.reason}")
-        ans = answer_question(self.s, query, as_of=as_of, gateway=gateway,
-                              nli=self.nli, tenant_id=ctx.tenant_id, lang=lang)
+        try:
+            ans = answer_question(self.s, query, as_of=as_of, gateway=gateway,
+                                  nli=self.nli, tenant_id=ctx.tenant_id, lang=lang,
+                                  retriever=self.retriever, scope_frbr_uris=scope_frbr_uris)
+        except LocalModelError as exc:
+            self.audit.confirm(intent, "failed")
+            return ServiceResponse(False, trace_id, decision,
+                                   answer=Answer.abstained(str(exc), as_of), reason=str(exc))
         self.audit.confirm(intent, "done")
         return ServiceResponse(not ans.abstain, trace_id, decision, answer=ans,
                                reason=ans.reason)
@@ -143,15 +159,20 @@ class LegalService:
         cite-or-abstain). node='summary' → model-tier router. Egress như lookup."""
         trace_id = trace_id or uuid.uuid4().hex
         decision, intent, gateway = self._route(
-            ctx, [PUBLIC_KB], "summarize", local_available, trace_id, actor)
+            ctx, [f"tenant:{ctx.tenant_id}", PUBLIC_KB], "summarize", local_available, trace_id, actor)
         if gateway is None:
             self.audit.confirm(intent, "denied")
             return ServiceResponse(False, trace_id, decision,
                                    reason=f"egress_denied:{decision.reason}")
-        ans = answer_question(
-            self.s, f"Tóm tắt các quy định pháp luật về: {topic}", as_of=as_of,
-            gateway=gateway, nli=self.nli, tenant_id=ctx.tenant_id, lang=lang,
-            node="summary")
+        try:
+            ans = answer_question(
+                self.s, f"Tóm tắt các quy định pháp luật về: {topic}", as_of=as_of,
+                gateway=gateway, nli=self.nli, tenant_id=ctx.tenant_id, lang=lang,
+                node="summary", retriever=self.retriever)
+        except LocalModelError as exc:
+            self.audit.confirm(intent, "failed")
+            return ServiceResponse(False, trace_id, decision,
+                                   answer=Answer.abstained(str(exc), as_of), reason=str(exc))
         self.audit.confirm(intent, "done")
         return ServiceResponse(not ans.abstain, trace_id, decision, answer=ans,
                                reason=ans.reason)
@@ -168,8 +189,13 @@ class LegalService:
         if gateway is None:                       # local down → không fallback
             self.audit.confirm(intent, "denied")
             return DraftResult(True, reason="local_unavailable"), trace_id
-        d = PetitionDraftService(self.s, gateway=gateway, nli=self.nli).draft(
-            kind, facts, as_of, tenant_id=ctx.tenant_id, lang=lang)
+        try:
+            d = PetitionDraftService(self.s, gateway=gateway, nli=self.nli,
+                                     retriever=self.retriever).draft(
+                kind, facts, as_of, tenant_id=ctx.tenant_id, lang=lang)
+        except LocalModelError as exc:
+            self.audit.confirm(intent, "failed")
+            return DraftResult(True, reason=str(exc)), trace_id
         self.audit.confirm(intent, "done")
         return d, trace_id
 
@@ -183,8 +209,13 @@ class LegalService:
         if gateway is None:
             self.audit.confirm(intent, "denied")
             return AdvisoryResult(True, reason="local_unavailable"), trace_id
-        a = ComplianceAdvisoryService(self.s, gateway=gateway, nli=self.nli).advise(
-            activity, as_of, tenant_id=ctx.tenant_id, lang=lang)
+        try:
+            a = ComplianceAdvisoryService(self.s, gateway=gateway, nli=self.nli,
+                                         retriever=self.retriever).advise(
+                activity, as_of, tenant_id=ctx.tenant_id, lang=lang)
+        except LocalModelError as exc:
+            self.audit.confirm(intent, "failed")
+            return AdvisoryResult(True, reason=str(exc)), trace_id
         self.audit.confirm(intent, "done")
         return a, trace_id
 
@@ -193,7 +224,11 @@ class LegalService:
         """FR-03 second-opinion. CN-03 high-risk → BẮT BUỘC audit. Trả (JudgmentFinding, tid)."""
         from ..w6 import JudgmentAnalysisService
         trace_id = uuid.uuid4().hex
-        _d, intent, _g = self._route(ctx, [PUBLIC_KB], "judgment", None, trace_id, actor)
+        intent = self.audit.record_intent(
+            tenant_id=ctx.tenant_id, actor=ctx.subject or actor, action="judgment",
+            resource="case", trace_id=trace_id, data_class=PUBLIC_KB,
+            residency=ctx.residency_region, llm_destination="none",
+        )
         f = JudgmentAnalysisService(self.s).analyze(
             cited_eids, expected_governing, as_of, cited_precedents=cited_precedents)
         self.audit.confirm(intent, "done")
@@ -239,6 +274,35 @@ class LegalService:
         from ..core.knowledge_ops import pending_relations
         return pending_relations(self.s)
 
-    def approve_relation(self, rel_id: int):
+    def approve_relation(self, rel_id: int, ctx: TenantContext):
+        if not ctx.platform_operator:
+            raise PermissionError("platform operator required")
+        if self.knowledge_session_factory is None:
+            raise RuntimeError("knowledge administration connection is not configured")
+        import sqlalchemy as sa
+
         from ..core.knowledge_ops import approve_relation
-        approve_relation(self.s, rel_id)
+        from ..w2.models import Document, Unit, UnitVersion
+        from ..w2.repo import materialize
+        from ..w3.indexer import reindex_document
+        from ..w3.retrieval import IndexedRetriever
+
+        trace_id = uuid.uuid4().hex
+        intent = self.audit.record_intent(
+            tenant_id=ctx.tenant_id, actor=ctx.subject or "operator",
+            action="approve_relation", resource=f"relation:{rel_id}", trace_id=trace_id,
+            data_class=PUBLIC_KB, residency=ctx.residency_region, llm_destination="none",
+        )
+        with self.knowledge_session_factory() as session, session.begin():
+            rel = approve_relation(session, rel_id)
+            applied = materialize(session, rel)
+            if (applied and rel.relation_type in {"repeals", "replaces"}
+                    and isinstance(self.retriever, IndexedRetriever)):
+                doc = session.get(Document, rel.dst_doc_id)
+                langs = session.scalars(sa.select(UnitVersion.lang).join(Unit).where(
+                    Unit.document_id == doc.id).distinct()).all()
+                for lang in langs:
+                    reindex_document(session, doc.frbr_uri, lang=lang,
+                                     embedder=self.retriever.embedder)
+        self.audit.confirm(intent, "done")
+        return applied

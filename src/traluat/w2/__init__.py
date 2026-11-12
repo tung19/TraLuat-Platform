@@ -13,10 +13,10 @@ from .bitemporal import (
 from .graph import GraphStore, PostgresGraphStore
 
 __all__ = [
-    "GraphStore",
-    "PostgresGraphStore",
     "BitemporalCorruption",
     "EffectStatus",
+    "GraphStore",
+    "PostgresGraphStore",
     "UnitVersion",
     "apply_amendment",
     "effect_status",

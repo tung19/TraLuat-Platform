@@ -12,7 +12,7 @@ from traluat.w2.db import make_engine
 from traluat.w3 import KeywordNLIVerifier, ground
 
 D = dt.date
-from tests.test_w1_structure import SAMPLE  # noqa: E402
+from tests.test_w1_structure import SAMPLE
 
 
 @pytest.fixture()

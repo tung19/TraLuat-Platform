@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("transformers")
 
-from traluat.w3.nli_xnli import XNLIVerifier  # noqa: E402
+from traluat.w3.nli_xnli import XNLIVerifier
 
 _SRC = "Doanh nghiệp phải nộp hồ sơ trong thời hạn 15 ngày làm việc."
 

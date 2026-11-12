@@ -45,6 +45,8 @@ class KeywordElementJudge:
     cross-provider → HITL khi bất đồng). Test điều khiển được bằng câu chữ tình tiết.
     """
 
+    checkpoint_version = "keyword-element-v1"
+
     def judge(self, element: str, law_text: str, party_facts: str) -> bool | None:
         et = _tokens(element)
         if not et:

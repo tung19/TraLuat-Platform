@@ -28,7 +28,8 @@ def project_to_neo4j(session: Session, driver, *, database: str = "neo4j") -> in
         sa.select(Src.eid, Dst.eid, NormRelation.relation_type,
                   NormRelation.effective_date, NormRelation.review_status)
         .join(Src, Src.id == NormRelation.src_unit_id)
-        .join(Dst, Dst.id == NormRelation.dst_unit_id)).all()
+        .join(Dst, Dst.id == NormRelation.dst_unit_id)
+        .where(NormRelation.review_status == "approved")).all()
 
     with driver.session(database=database) as s:
         s.run("MATCH (n:Unit) DETACH DELETE n")                 # full rebuild (đồ thị nhỏ)
@@ -57,6 +58,10 @@ def sync_relation(driver, session: Session, rel: NormRelation, *, database: str 
     labels = dict(session.execute(
         sa.select(Unit.eid, Unit.label).where(Unit.eid.in_([se, de]))).all())
     with driver.session(database=database) as s:
+        if rel.review_status != "approved":
+            s.run("MATCH (:Unit {eid:$s})-[e:REL {type:$t}]->(:Unit {eid:$d}) DELETE e",
+                  s=se, d=de, t=rel.relation_type)
+            return False
         s.run("MERGE (:Unit {eid:$e}) ", e=se)
         s.run("MATCH (u:Unit {eid:$e}) SET u.label=$l", e=se, l=labels.get(se))
         s.run("MERGE (:Unit {eid:$e}) ", e=de)
@@ -111,29 +116,37 @@ class Neo4jGraphStore:
         self.database = database
 
     def multihop(self, start_eid, rel_types, max_hops=3, as_of=None):
+        if type(max_hops) is not int or not 0 <= max_hops <= 3:
+            raise ValueError("max_hops must be an integer between 0 and 3")
+        if max_hops == 0:
+            return []
         as_of = (as_of or dt.date.max).isoformat()
         cy = (
-            "MATCH p=(s:Unit {eid:$start})-[rels:REL*1..%d]->(t:Unit) "
-            "WHERE all(r IN rels WHERE r.type IN $types AND "
+            f"MATCH p=(s:Unit {{eid:$start}})-[rels:REL*1..{max_hops}]->(t:Unit) "
+            "WHERE all(r IN rels WHERE r.review_status = 'approved' AND r.type IN $types AND "
             "          (r.effective_date IS NULL OR r.effective_date <= $as_of)) "
-            "RETURN DISTINCT t.eid AS eid" % max_hops)
+            "RETURN DISTINCT t.eid AS eid")
         with self.driver.session(database=self.database) as s:
             return sorted(r["eid"] for r in s.run(cy, start=start_eid,
                                                   types=list(rel_types), as_of=as_of)
                           if r["eid"] != start_eid)
 
     def neighborhood(self, eid, as_of=None, rel_types=None, max_hops=1):
+        if type(max_hops) is not int or not 0 <= max_hops <= 3:
+            raise ValueError("max_hops must be an integer between 0 and 3")
         # 1-hop thuần Cypher (không phụ thuộc APOC) — đủ cho viz FR-37 cơ bản.
         cy = (
             "MATCH (c:Unit {eid:$e}) "
             "OPTIONAL MATCH (c)-[r:REL]-(n:Unit) "
-            "WHERE $types IS NULL OR r.type IN $types "
+            "WHERE $max_hops > 0 AND r.review_status = 'approved' AND ($types IS NULL OR r.type IN $types) "
+            "AND (r.effective_date IS NULL OR r.effective_date <= $as_of) "
             "RETURN c.eid AS c_eid, c.label AS c_label, c.utype AS c_utype, "
             "collect(DISTINCT {eid:n.eid, label:n.label, type:n.utype}) AS nbrs, "
             "collect(DISTINCT {src:startNode(r).eid, dst:endNode(r).eid, "
             "                  type:r.type, review_status:r.review_status}) AS edges")
         with self.driver.session(database=self.database) as s:
-            rec = s.run(cy, e=eid, types=list(rel_types) if rel_types else None).single()
+            rec = s.run(cy, e=eid, types=list(rel_types) if rel_types else None,
+                        as_of=(as_of or dt.date.max).isoformat(), max_hops=max_hops).single()
         if rec is None:
             return {"center": eid, "nodes": [], "edges": []}
         nodes = [{"eid": rec["c_eid"], "label": rec["c_label"], "type": rec["c_utype"]}]

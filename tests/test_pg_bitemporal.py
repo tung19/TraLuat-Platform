@@ -76,7 +76,7 @@ def test_idempotent_via_db(session: Session):
     repo.apply_amendment(session, EID, "B", D(2023, 6, 1), source_relation_id="r1")
     repo.apply_amendment(session, EID, "B", D(2023, 6, 1), source_relation_id="r1")  # replay
     n = session.scalar(sa.select(sa.func.count()).select_from(UnitVersion))
-    assert n == 2  # bản gốc + 1 amendment (không nhân đôi)
+    assert n == 3  # retired belief + current left segment + amendment, replay adds nothing
 
 
 def test_exclude_constraint_enforced_by_db(session: Session):

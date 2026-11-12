@@ -16,7 +16,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # loại câu nhạy hồi-tố: thiếu mốc sự kiện = KHÔNG được đoán today (phải HITL)
 _RETRO_SENSITIVE = {"hinh_su", "xu_phat"}
@@ -29,9 +29,7 @@ _RE_YEAR = re.compile(r"\bnăm\s+(\d{4})\b")
 
 def _first_event_date(query: str) -> dt.date | None:
     q = unicodedata.normalize("NFC", query)
-    if (m := _RE_DMY.search(q)):
-        d, mo, y = (int(x) for x in m.groups())
-    elif (m := _RE_SLASH.search(q)):
+    if (m := _RE_DMY.search(q)) or (m := _RE_SLASH.search(q)):
         d, mo, y = (int(x) for x in m.groups())
     elif (m := _RE_YEAR.search(q)):
         d, mo, y = 1, 1, int(m.group(1))   # 'năm Y' → 01/01/Y (đại diện, kém chính xác)

@@ -2,31 +2,36 @@
 
 Idempotent (upsert theo khoá). Giá trị thời hạn là **đại diện, cần chuyên gia xác
 nhận** — đúng-sai số liệu thuộc đội data; moat là CƠ CHẾ (hiệu-lực-aware + neo điều).
-    uv run python scripts/seed_deadlines.py
+    uv run python scripts/seed_deadlines.py --reviewed
 """
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import json
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from traluat.w1.reference import RefRow, upsert_reference
+from traluat.tools.reference import RefRow, upsert_reference
 from traluat.w2.db import make_engine
 
 ROOT = Path(__file__).resolve().parent.parent / "data" / "seed"
 
 
-def seed() -> tuple[int, int]:
+def seed(*, reviewed: bool = False) -> tuple[int, int]:
+    if not reviewed:
+        raise ValueError("Illustrative seed data requires primary-source review before publication")
     with Session(make_engine(), future=True) as s:
         dl = [json.loads(x) for x in (ROOT / "deadlines.jsonl").read_text(
             encoding="utf-8").splitlines() if x.strip()]
-        upsert_reference(s, "thoi_hieu", [
+        outcome = upsert_reference(s, "thoi_hieu", [
             RefRow(r["kind"], {"value": r["value"], "unit": r["unit"], "note": r.get("note")},
                    dt.date.fromisoformat(r["valid_from"]), None, r.get("source_eid"))
             for r in dl], pii_check=False)
+        if outcome.quarantined:
+            raise ValueError("Deadline references were quarantined; import and review the cited law first")
 
         hol = [json.loads(x) for x in (ROOT / "holidays.jsonl").read_text(
             encoding="utf-8").splitlines() if x.strip()]
@@ -38,5 +43,8 @@ def seed() -> tuple[int, int]:
 
 
 if __name__ == "__main__":
-    nd, nh = seed()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--reviewed", action="store_true",
+                        help="confirm this seed bundle was reviewed against its primary sources")
+    nd, nh = seed(reviewed=parser.parse_args().reviewed)
     print(f"✓ seed thoi_hieu: {nd} loại · ngay_nghi: {nh} năm")

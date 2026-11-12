@@ -4,6 +4,10 @@ node_modules/
 venv/
 __pycache__/
 *.pyc
+*.egg-info/
+.env
+.env.*
+!.env.example
 
 # External study repos (cloned, có .git riêng — re-clone qua steal-list khi cần)
 refs/

@@ -5,7 +5,7 @@ half-open biên · chưa-hiệu-lực · bãi bỏ · same-date order · idempot
 overlap fail-loud · chuyển tiếp · hồi tố (applies_from).
 """
 
-from datetime import date, datetime, timezone
+from datetime import date
 
 import pytest
 

@@ -10,22 +10,41 @@ Defer (cần model/gold): element judge LLM thật (ElementJudge port có stub),
 Adjudicator per-party, Reasoner đa vai LangGraph, nối GroundingService hậu-draft.
 """
 
-from .types import Article, AuditEntry, AuditResult, Precedent
 from .auditor import Auditor, ElementJudge, KeywordElementJudge, prune_unsupported
-from .reasoner import Adjudication, CaseInput, PartyResult, ReasoningEngine
-from .multi_role import DebateResult, MultiRoleReasoner, RoleConfig, Utterance
 from .checkpoint import (
-    Checkpointer, CrossTenantCheckpoint, DebateCheckpoint,
-    InMemoryCheckpointer, PostgresCheckpointer,
+    Checkpointer,
+    CrossTenantCheckpoint,
+    DebateCheckpoint,
+    InMemoryCheckpointer,
+    PostgresCheckpointer,
 )
+from .multi_role import DebateResult, MultiRoleReasoner, RoleConfig, Utterance
 from .precedent_store import add_precedent, match_by_eids
+from .reasoner import Adjudication, CaseInput, PartyResult, ReasoningEngine
+from .types import Article, AuditEntry, AuditResult, Precedent
 
 __all__ = [
-    "Article", "Precedent", "AuditEntry", "AuditResult",
-    "Auditor", "ElementJudge", "KeywordElementJudge", "prune_unsupported",
-    "CaseInput", "PartyResult", "Adjudication", "ReasoningEngine",
-    "MultiRoleReasoner", "RoleConfig", "Utterance", "DebateResult",
-    "Checkpointer", "InMemoryCheckpointer", "PostgresCheckpointer",
-    "DebateCheckpoint", "CrossTenantCheckpoint",
-    "add_precedent", "match_by_eids",
+    "Adjudication",
+    "Article",
+    "AuditEntry",
+    "AuditResult",
+    "Auditor",
+    "CaseInput",
+    "Checkpointer",
+    "CrossTenantCheckpoint",
+    "DebateCheckpoint",
+    "DebateResult",
+    "ElementJudge",
+    "InMemoryCheckpointer",
+    "KeywordElementJudge",
+    "MultiRoleReasoner",
+    "PartyResult",
+    "PostgresCheckpointer",
+    "Precedent",
+    "ReasoningEngine",
+    "RoleConfig",
+    "Utterance",
+    "add_precedent",
+    "match_by_eids",
+    "prune_unsupported",
 ]

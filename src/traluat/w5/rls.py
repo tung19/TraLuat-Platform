@@ -1,10 +1,8 @@
-"""Row-Level Security helpers (C2) — sẵn sàng áp cho bảng DỮ LIỆU KHÁCH khi có.
+"""RLS bindings and runtime credential checks for customer tables.
 
-★ C2 — RLS mặc định FAIL-OPEN: policy bị bỏ qua im lặng nếu app role SỞ HỮU bảng
-hoặc có BYPASSRLS. Chống bằng: (a) `FORCE ROW LEVEL SECURITY` (ép cả owner), (b)
-app chạy role NON-OWNER không BYPASSRLS, policy mặc-định-deny. (b) là ops/role —
-ghi chú; (a) + policy ở đây. KB luật (document/unit/...) là shared read-only → KHÔNG
-áp RLS; chỉ bảng khách (conversations/analysis_task/audit_log/chunk client) — chưa có.
+Runtime uses a fixed non-owner role and rejects privileged login memberships.
+Tenant policies default-deny without a transaction-local identity. Public legal
+knowledge is shared read-only; identity and customer records enforce RLS.
 """
 
 from __future__ import annotations
@@ -25,8 +23,8 @@ def rls_ddl(table: str, *, tenant_col: str = "tenant_id") -> list[str]:
         f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY",
         f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY",
         f"DROP POLICY IF EXISTS tenant_isolation ON {table}",
-        f"CREATE POLICY tenant_isolation ON {table} FOR ALL "
-        f"USING ({pred}) WITH CHECK ({pred})",
+        (f"CREATE POLICY tenant_isolation ON {table} FOR ALL "
+         f"USING ({pred}) WITH CHECK ({pred})"),
     ]
 
 
@@ -34,3 +32,33 @@ def set_tenant(session: Session, tenant_id: str) -> None:
     """Mở phiên theo tenant (SET LOCAL qua set_config — SQLi-safe, bind param)."""
     session.execute(
         sa.text("SELECT set_config('app.current_tenant', :t, true)"), {"t": tenant_id})
+
+
+def use_app_role(session: Session) -> None:
+    """Every transaction drops to the fixed non-owner, non-bypass runtime role."""
+    session.execute(sa.text("SET LOCAL ROLE traluat_app"))
+    unsafe = session.scalar(sa.text(
+        "SELECT rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication OR EXISTS ("
+        "SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE c.relowner=pg_roles.oid AND n.nspname='public' AND c.relkind IN ('r','p')) "
+        "FROM pg_roles WHERE rolname=current_user"))
+    if unsafe is not False:
+        raise PermissionError("runtime role must enforce row-level security")
+
+
+def ensure_runtime_login(session: Session) -> None:
+    """Deployment credentials themselves must not retain an owner/bypass escape."""
+    unsafe = session.scalar(sa.text(
+        "SELECT EXISTS (SELECT 1 FROM pg_roles r WHERE "
+        "(r.rolname=session_user OR pg_has_role(session_user, r.oid, 'MEMBER')) AND ("
+        "r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR EXISTS ("
+        "SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE c.relowner=r.oid AND n.nspname='public' AND c.relkind IN ('r','p'))))"))
+    if unsafe is not False:
+        raise PermissionError("runtime login must be non-owner, non-superuser and NOBYPASSRLS")
+
+
+def set_identity(session: Session, tenant_id: str, subject: str) -> None:
+    set_tenant(session, tenant_id)
+    session.execute(sa.text("SELECT set_config('app.current_subject', :s, true)"),
+                    {"s": subject})

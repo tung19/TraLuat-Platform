@@ -27,6 +27,14 @@ _RE_HIEU_LUC = re.compile(
     re.IGNORECASE,
 )
 _RE_HIEU_LUC_KY = re.compile(r"có hiệu lực(?:\s+thi hành)?\s+(?:kể\s+)?từ ngày ký", re.IGNORECASE)
+_RE_DOC_SUBJECT = re.compile(
+    r"^(?:\d+[.)]\s*)?(?:Nghị định|Bộ luật|Luật|Thông tư|Quyết định|Nghị quyết|Pháp lệnh|Văn bản)\s+này\b",
+    re.IGNORECASE,
+)
+_RE_ISSUED_LINE = re.compile(
+    r"^(?:[^,\n]{1,100},\s*)?ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 # phased-commencement: '(Khoản M )Điều N … có hiệu lực … kể từ ngày DD tháng MM năm YYYY'
 # — trong CÙNG một mệnh đề (tiêu đề 'Điều N.' đã tách riêng nên không dính false-positive).
 _RE_HL_UNIT = re.compile(
@@ -88,19 +96,33 @@ def extract_metadata(text: str) -> DocMeta:
         meta.doc_number = m.group(1)
         meta.doc_type = _doc_type_from_suffix(m.group(2))
 
-    low_upper = text.upper()
+    header = re.split(r"^\s*(?:Điều\s+\d+|Chương\s+|Phần\s+|Mục\s+)", text,
+                      maxsplit=1, flags=re.MULTILINE | re.IGNORECASE)[0]
+    low_upper = header.upper()
     for auth in _AUTHORITIES:  # cụ thể trước (list đã xếp dài/cụ thể hợp lý)
         if auth in low_upper:
             meta.authority_name = auth
             break
 
-    if (m := _RE_NGAY_KY.search(text)):
+    if (m := _RE_ISSUED_LINE.search(header)):
         meta.date_issued = _mk_date(*m.groups())
 
-    if (m := _RE_HIEU_LUC.search(text)):
-        meta.date_effective = _mk_date(*m.groups())
-    elif _RE_HIEU_LUC_KY.search(text):
-        meta.date_effective = meta.date_issued  # 'kể từ ngày ký' → = ngày ban hành
+    effective_dates: set[dt.date] = set()
+    for clause in _clauses(text):
+        # A phased unit is not the document-level commencement, irrespective of
+        # whether it appears before or after the general commencement clause.
+        if not _RE_DOC_SUBJECT.search(clause):
+            continue
+        if (m := _RE_HIEU_LUC.search(clause)):
+            when = _mk_date(*m.groups())
+        elif _RE_HIEU_LUC_KY.search(clause):
+            when = meta.date_issued
+        else:
+            continue
+        if when is not None:
+            effective_dates.add(when)
+    if len(effective_dates) == 1:
+        meta.date_effective = effective_dates.pop()
 
     return meta
 

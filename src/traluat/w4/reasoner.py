@@ -72,10 +72,12 @@ class ReasoningEngine:
         nli: NLIVerifier | None = None, element_judge: ElementJudge | None = None,
         elements_by_eid: dict[str, list[str]] | None = None, graph_hops: int = 1,
         graph_store: GraphStore | None = None,
+        retriever=None,
     ) -> None:
         self.s = session
         self.gateway = gateway
         self.nli = nli
+        self.retriever = retriever
         self.element_judge = element_judge
         self.auditor = Auditor(session, element_judge)
         self.elements_by_eid = elements_by_eid or {}
@@ -91,7 +93,7 @@ class ReasoningEngine:
 
     # — Researcher: thu bằng chứng (uỷ W3 retrieve) + MỞ RỘNG qua norm-graph, KHÔNG verify —
     def _research(self, facts: str, as_of: dt.date, lang: str, top_k: int):
-        cands = retrieve(self.s, facts, as_of, lang=lang, top_k=top_k)
+        cands = (self.retriever or retrieve)(self.s, facts, as_of, lang=lang, top_k=top_k)
         articles, chunk_by_eid = [], {}
         for rc in cands:
             chunk_by_eid[rc.unit_eid] = rc
@@ -126,10 +128,12 @@ class ReasoningEngine:
         # ★ Adjudicator CHỈ được trích trong tập verified (hợp đồng thu hẹp §2) —
         # loại trích dẫn ngoài verified (kiến thức tham số / điều đã bị loại ở cổng).
         allowed = {a.unit_eid for a in verified}
-        cited = [c.unit_eid for c in draft.citations if c.unit_eid in allowed]
+        cited = [c for c in draft.citations if c.unit_eid in allowed]
+        if len(cited) != len(draft.citations):
+            return PartyResult(party, abstain=True, reason="citation_outside_context")
         g = ground(self.s, draft.text, as_of, cited, lang, self.nli)
         if g.abstain:
-            return PartyResult(party, abstain=True, reason=g.reason, relief=draft.text)
+            return PartyResult(party, abstain=True, reason=g.reason)
         return PartyResult(
             party, abstain=False, relief=draft.text, citations=g.supported_eids,
             effect_status={gt.unit_eid: gt.status for gt in g.gates if gt.passed},
@@ -146,10 +150,10 @@ class ReasoningEngine:
             mr = MultiRoleReasoner(
                 self.s, gateway=self.gateway, nli=self.nli,
                 element_judge=self.element_judge, elements_by_eid=self.elements_by_eid,
-                top_k=top_k)
+                top_k=top_k, retriever=self.retriever)
             return mr.run(case, as_of, tenant_id=tenant_id, case_id=case_id, lang=lang).adjudication
 
-        from .precedent_store import match_by_eids
+        from .precedent_store import binding_precedents
 
         parties = case.parties or ["(chung)"]
         results, all_verified, all_prec, trail = [], [], [], []
@@ -158,7 +162,7 @@ class ReasoningEngine:
             facts = case.facts_by_party.get(party, case.facts)
             articles, chunk_by_eid = self._research(facts, as_of, lang, top_k)
             # Researcher: án lệ tựa vào điều ứng viên (Auditor sẽ prune theo verified)
-            cand_prec = match_by_eids(self.s, [a.unit_eid for a in articles])
+            cand_prec = binding_precedents(self.s, [a.unit_eid for a in articles], as_of)
             audit = self.auditor.audit(facts, as_of, articles, cand_prec, lang=lang)
             trail.extend(audit.trail)
             all_verified.extend(audit.verified_articles)

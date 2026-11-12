@@ -19,7 +19,7 @@ class AuditEntry:
     data_class: str | None = None
     residency: str = "vn"
     llm_destination: str | None = None
-    ts: dt.datetime = field(default_factory=lambda: dt.datetime.now(dt.timezone.utc))
+    ts: dt.datetime = field(default_factory=lambda: dt.datetime.now(dt.UTC))
     meta: dict = field(default_factory=dict)
 
 
@@ -91,3 +91,63 @@ class PostgresAuditLog:
         from .models import AuditLogRow
         return list(self.s.scalars(
             sa.select(AuditLogRow).where(AuditLogRow.trace_id == trace_id)))
+
+
+class DurablePostgresAuditLog:
+    """Commit metadata independently before downstream work; never store bodies."""
+
+    def __init__(self, session_factory, *, tenant_id: str | None = None) -> None:
+        self._sessions = session_factory
+        self._tenant_id = tenant_id
+
+    def _append(self, entry: AuditEntry) -> AuditEntry:
+        import uuid
+
+        from .models import AuditLogRow
+        from .rls import set_tenant, use_app_role
+
+        if self._tenant_id is not None and self._tenant_id != entry.tenant_id:
+            raise PermissionError("audit writer cannot switch tenant")
+        self._tenant_id = entry.tenant_id
+        with self._sessions() as session, session.begin():
+            use_app_role(session)
+            set_tenant(session, entry.tenant_id)
+            session.add(AuditLogRow(
+                tenant_id=uuid.UUID(entry.tenant_id), actor=entry.actor,
+                action=entry.action, resource=entry.resource, trace_id=entry.trace_id,
+                phase=entry.phase, data_class=entry.data_class, residency=entry.residency,
+                llm_destination=entry.llm_destination, ts=entry.ts,
+            ))
+        return entry
+
+    def record_intent(self, **values) -> AuditEntry:
+        return self._append(AuditEntry(phase="intent", **values))
+
+    def confirm(self, intent: AuditEntry, phase: str) -> AuditEntry:
+        return self._append(AuditEntry(
+            tenant_id=intent.tenant_id, actor=intent.actor, action=intent.action,
+            resource=intent.resource, trace_id=intent.trace_id, phase=phase,
+            data_class=intent.data_class, residency=intent.residency,
+            llm_destination=intent.llm_destination,
+        ))
+
+    def by_trace(self, trace_id: str) -> list[AuditEntry]:
+        import sqlalchemy as sa
+
+        from .models import AuditLogRow
+        from .rls import set_tenant, use_app_role
+        from .tenancy import MissingTenant
+
+        if not self._tenant_id:
+            raise MissingTenant("audit history requires a tenant")
+        with self._sessions() as session, session.begin():
+            use_app_role(session)
+            set_tenant(session, self._tenant_id)
+            rows = session.scalars(sa.select(AuditLogRow).where(
+                AuditLogRow.trace_id == trace_id).order_by(AuditLogRow.id)).all()
+            return [AuditEntry(
+                tenant_id=str(row.tenant_id), actor=row.actor, action=row.action,
+                resource=row.resource, trace_id=row.trace_id, phase=row.phase,
+                data_class=row.data_class, residency=row.residency,
+                llm_destination=row.llm_destination, ts=row.ts,
+            ) for row in rows]
